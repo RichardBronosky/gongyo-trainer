@@ -17,10 +17,10 @@ The application must:
 
 Do not add the following to this repository:
 
-- Video or audio files.
+- Video files or audio files other than approved M4A runtime assets under `web/assets/`.
 - Timing-review or splice-review interfaces.
 - Beat collection data or reconciliation tools.
-- Python servers or APIs.
+- Deployed servers, backends, or APIs. The local-only server under `internal/` is development tooling.
 - Generated media artifacts.
 - Frameworks, package managers, bundlers, or runtime dependencies unless a future requirement cannot reasonably be met with browser APIs.
 
@@ -149,10 +149,13 @@ The application intentionally uses browser-native HTML, CSS, and JavaScript.
 - `web/src/syllables.css`: Trainer grid, highlights, responsive presentation.
 - `web/manifest.webmanifest`: Install metadata.
 - `web/sw.js`: Offline app-shell cache.
-- `web/assets/`: Runtime content and icons only.
+- `web/assets/`: Runtime content, icons, and approved M4A audio only.
 - `docs/`: Human/AI reference material that is not fetched at runtime.
+- `internal/server.py`: Local-only no-cache, byte-range development server behind `tools.sh`.
+- `tools.sh`: Sole user-facing entry point for local development tools.
 
 All runtime URLs must remain relative so the app works below the GitHub Pages project path `/gongyo-trainer/`.
+The deployed application remains entirely static: `.github/workflows/pages.yml` publishes only `web/`, never `internal/` or other repository tooling.
 
 ## 7. Offline and Versioning Contract
 
@@ -163,9 +166,9 @@ For every deployable change:
 1. Increment `CACHE_NAME` in `web/sw.js`.
 2. Update the visible `vN` in `web/ritual.html`.
 3. Update the visible `vN` in `web/syllables.html`.
-4. Add any new runtime file to `APP_SHELL`.
+4. Add any new install-critical runtime file to `APP_SHELL`. Large seekable M4A files may be intentionally excluded so service-worker activation is not blocked by audio downloads.
 5. Confirm every `APP_SHELL` path exists.
-6. Load once online, then verify both pages while offline.
+6. Load once online, then verify both pages and their install-critical content while offline. M4A files excluded from `APP_SHELL` are not part of this activation-time offline guarantee.
 
 Do not add random cache-busting query strings. Stable URLs are required for deterministic offline matching.
 
@@ -194,9 +197,9 @@ Deployment acceptance:
 
 - JavaScript passes `node --check`.
 - Manifest parses as JSON.
-- Every service-worker app-shell file exists.
+- Every install-critical service-worker app-shell file exists; any intentionally excluded M4A remains under `web/assets/`.
 - No absolute root-relative URLs such as `/assets/...` appear.
-- Repository contains no MP4, audio, timing, splice, beat, or server files.
+- Repository contains no video, unapproved audio, timing-review, splice-review, beat-collection, generated-media, or deployed server/backend/API files.
 
 ### Ritual
 
