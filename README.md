@@ -5,7 +5,7 @@ A static, installable Gongyo ritual checklist and paced reading trainer. The app
 ## Pages
 
 - `web/ritual.html` renders the nested ritual checklist from `web/assets/ritual.txt`.
-- `web/syllables.html` renders Chapters 2 and 16 from `web/assets/syllables.5-wide.txt`.
+- `web/syllables.html` renders Chapters 2 and 16 from `web/assets/syllables.5-wide.txt` with seekable chapter audio and persisted audio-synchronized pacing.
 - `web/index.html` redirects to the ritual page.
 
 ## Local Development

@@ -79,6 +79,8 @@ Behavior:
 
 Chapter labels link to the externally hosted reference files. Each chapter ends with a link back to its exact Ritual checklist item.
 
+Each chapter also has native audio controls backed by its approved relative M4A asset. Playback supports pause, resume, and timeline seeking; only one chapter plays at a time. Pausing removes the active FSD highlight without resetting the audio playhead, and resumed or seeked playback follows `audio.currentTime` using saved timing.
+
 ## 4. Self-Driving Mode
 
 The trainer's Full Self-Driving mode, abbreviated FSD, estimates reading speed and highlights one spoken cell at a time.
@@ -113,6 +115,13 @@ The three marker cells before `Sho i sho ho` represent three passes through the 
 - FSD stops at the end of the current chapter and never crosses into another chapter.
 
 The implementation should remain data-oriented enough to support additional repeated sections later.
+
+### Audio Timing
+
+- Tapping five consecutive rows while chapter audio plays calibrates FSD against the audio playhead and persists the resulting full-chapter timeline.
+- Chapter 2 timing is stored under `gongyo.fsd.chapter2`; Chapter 16 timing is stored under `gongyo.fsd.chapter16`.
+- Saved timing drives highlighting during later playback, including forward and backward seeking.
+- Each chapter reports timing status and provides a JSON copy action with a legacy clipboard fallback.
 
 ## 5. Content Formats
 
@@ -159,7 +168,7 @@ The deployed application remains entirely static: `.github/workflows/pages.yml` 
 
 ## 7. Offline and Versioning Contract
 
-The service worker uses a versioned cache-first app shell.
+The service worker installs the versioned critical app shell atomically. Approved M4A files are runtime assets rather than install-blocking app-shell entries. Same-origin byte-range requests bypass the Cache API so audio seeking can receive partial responses; navigations are network-first with exact-page and Ritual offline fallbacks, while other same-origin resources use the current cache with exact-key cache-first runtime filling.
 
 For every deployable change:
 

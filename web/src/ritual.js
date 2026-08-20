@@ -286,7 +286,27 @@ loadRitual().catch((error) => {
   document.querySelector("[data-ritual-tree]").textContent = error.message;
 });
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloading) return;
+    reloading = true;
+    window.setTimeout(() => location.reload(), 1000);
+  });
+
+  navigator.serviceWorker.register("sw.js").then((registration) => {
+    registration.update().catch(() => {});
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") registration.update().catch(() => {});
+    });
+  }).catch((error) => {
+    console.error("Service worker registration failed", error);
+  });
+}
+
+registerServiceWorker();
 
 document.querySelector("[data-timer-back]").addEventListener("click", (event) => {
   event.stopPropagation();

@@ -169,6 +169,35 @@ code {
   margin-bottom: clamp(12px, 2vw, 20px);
 }
 
+.chapter-audio {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  width: min(460px, 58%);
+}
+
+.chapter-audio audio {
+  width: 100%;
+  height: 42px;
+}
+
+.timing-status {
+  color: var(--muted);
+  font: 0.74rem ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-align: right;
+}
+
+.copy-timing {
+  min-height: 42px;
+  padding: 0 9px;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.copy-timing[hidden] {
+  display: none;
+}
+
 .chapter-link {
   color: var(--muted);
   font-size: clamp(1.4rem, 4vw, 2.4rem);
@@ -325,6 +354,16 @@ code {
 
   .chapter-header {
     display: block;
+  }
+
+  .chapter-audio {
+    justify-items: stretch;
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .timing-status {
+    text-align: left;
   }
 
   .syllable-line {

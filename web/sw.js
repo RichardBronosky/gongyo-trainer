@@ -1,4 +1,4 @@
-const CACHE_NAME = "gongyo-trainer-v18";
+const CACHE_NAME = "gongyo-trainer-v21";
 const APP_SHELL = [
   "./index.html",
   "./syllables.html",
@@ -30,7 +30,9 @@ self.addEventListener("activate", (event) => {
       .then((names) => Promise.all(names
         .filter((name) => (name.startsWith("gongyo-syllables-") || name.startsWith("gongyo-trainer-")) && name !== CACHE_NAME)
         .map((name) => caches.delete(name))))
-      .then(() => self.clients.claim()),
+      .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: "window" }))
+      .then((clients) => Promise.allSettled(clients.map((client) => client.navigate(client.url)))),
   );
 });
 
@@ -41,16 +43,40 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then((cached) => {
-      if (cached) return cached;
+  if (request.headers.has("range")) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
-      return fetch(request).then((response) => {
-        if (!response || response.status !== 200 || response.type !== "basic") return response;
-        const responseForCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, responseForCache));
+  if (request.mode === "navigate") {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      try {
+        const response = await fetch(request);
+        if (response.status === 200 && response.type === "basic") {
+          await cache.put(request, response.clone()).catch(() => {});
+        }
         return response;
-      });
-    }),
-  );
+      } catch (error) {
+        const exactPage = await cache.match(request);
+        if (exactPage) return exactPage;
+        const ritualPage = await cache.match(new URL("./ritual.html", self.registration.scope).href);
+        if (ritualPage) return ritualPage;
+        throw error;
+      }
+    })());
+    return;
+  }
+
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+
+    const response = await fetch(request);
+    if (response.status === 200 && response.type === "basic") {
+      await cache.put(request, response.clone()).catch(() => {});
+    }
+    return response;
+  })());
 });

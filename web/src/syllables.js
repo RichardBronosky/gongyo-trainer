@@ -13,6 +13,11 @@ const chapterLinks = [
   },
 ];
 
+const chapterAudioSources = [
+  "assets/chapter2_hoben-pon.no-bell.m4a",
+  "assets/chapter16_juryo-hon.m4a",
+];
+
 const twoSyllableCells = new Set([
   "aku",
   "betsu",
@@ -95,6 +100,10 @@ function createChapter(chapter, index) {
   const headingLines = document.createElement("div");
   const lines = document.createElement("div");
   const ritualLink = document.createElement("a");
+  const audioWrap = document.createElement("div");
+  const audio = document.createElement("audio");
+  const timingStatus = document.createElement("span");
+  const copyTiming = document.createElement("button");
   const chapterNumber = index === 0 ? 2 : 16;
 
   section.className = "chapter";
@@ -107,6 +116,20 @@ function createChapter(chapter, index) {
   title.href = chapterLinks[index]?.href || "#";
   title.target = "_blank";
   title.rel = "noreferrer";
+  audioWrap.className = "chapter-audio";
+  audio.controls = true;
+  audio.preload = "metadata";
+  audio.src = chapterAudioSources[index];
+  audio.dataset.chapterAudio = "";
+  timingStatus.className = "timing-status";
+  timingStatus.dataset.timingStatus = "";
+  timingStatus.textContent = "No saved FSD timing";
+  copyTiming.type = "button";
+  copyTiming.className = "copy-timing";
+  copyTiming.dataset.copyTiming = "";
+  copyTiming.textContent = "Copy timing data";
+  copyTiming.hidden = true;
+  audioWrap.append(audio, timingStatus, copyTiming);
   ritualLink.className = "ritual-back-link";
   ritualLink.href = `ritual.html#ritual-chapter-${chapterNumber}`;
   ritualLink.textContent = "Back to ritual";
@@ -117,9 +140,12 @@ function createChapter(chapter, index) {
     lines.append(createLine(line, columns));
     if (/\[[ _]\]/.test(line)) columns = 7;
   });
-  header.append(title);
+  header.append(title, audioWrap);
   section.append(header, headingLines, lines, ritualLink);
-  section.dataset.chapter = String(index + 1);
+  section.dataset.chapter = String(chapterNumber);
+  section.querySelectorAll(".syllable-line").forEach((row, rowIndex) => {
+    row.dataset.rowIndex = String(rowIndex);
+  });
   return section;
 }
 
@@ -131,6 +157,7 @@ async function loadSyllables() {
   const text = await response.text();
   const chapters = text.split(/^----$/m).map(parseChapter);
   container.replaceChildren(...chapters.map(createChapter));
+  setupChapterAudio();
   if (location.hash) requestAnimationFrame(() => document.querySelector(location.hash)?.scrollIntoView());
 }
 
@@ -189,9 +216,13 @@ let rowTapHistory = [];
 let fsdTimer = null;
 let fsdCell = null;
 let fsdState = null;
+let audioFsdState = null;
+let audioFsdTickStarted = false;
 const MIN_BPM = 20;
 const MAX_BPM = 240;
 const MAX_RATE_CHANGE = 0.10;
+const EDGE_TAP_WINDOW_MS = 450;
+const TIMING_SCHEMA_VERSION = 1;
 
 function scrollRowToReadingPosition(row, behavior = "smooth") {
   const rect = row.getBoundingClientRect();
@@ -317,6 +348,269 @@ function buildPlaybackRows(startRow, startingRepeatPass = 0) {
   return playbackRows;
 }
 
+function timingStorageKey(chapter) {
+  return `gongyo.fsd.chapter${chapter.dataset.chapter}`;
+}
+
+function loadChapterTiming(chapter) {
+  try {
+    const timing = JSON.parse(localStorage.getItem(timingStorageKey(chapter)));
+    const audio = chapter.querySelector("[data-chapter-audio]");
+    const expectedRows = completeChapterPlaybackRows(chapter);
+    if (timing?.schemaVersion !== TIMING_SCHEMA_VERSION
+      || timing.chapter !== Number(chapter.dataset.chapter)
+      || timing.audioSrc !== audio?.getAttribute("src")
+      || !Number.isFinite(timing.bpm) || timing.bpm <= 0
+      || !Array.isArray(timing.rows) || timing.rows.length !== expectedRows.length
+      || timing.rows.length === 0) return null;
+
+    const validRows = timing.rows.every((row, index) => {
+      const expected = expectedRows[index];
+      const previous = timing.rows[index - 1];
+      const expectedRepeatPass = expected.repeatPass;
+      return Number.isInteger(row.sequenceIndex) && row.sequenceIndex === index
+        && Number.isInteger(row.rowIndex) && row.rowIndex === Number(expected.row.dataset.rowIndex)
+        && (row.repeatPass === null
+          ? expectedRepeatPass === null
+          : Number.isInteger(row.repeatPass) && row.repeatPass >= 0 && row.repeatPass < 3
+            && row.repeatPass === expectedRepeatPass)
+        && Number.isFinite(row.timestamp)
+        && (!previous || row.timestamp >= previous.timestamp)
+        && Number.isFinite(row.duration) && row.duration > 0
+        && Number.isFinite(row.bpm) && row.bpm > 0
+        && Number.isInteger(row.cellCount) && row.cellCount > 0
+        && row.cellCount === expected.cells.length;
+    });
+    return validRows ? timing : null;
+  } catch {
+    return null;
+  }
+}
+
+function updateChapterTimingStatus(chapter, message = null) {
+  const status = chapter.querySelector("[data-timing-status]");
+  if (!status) return;
+  const timing = loadChapterTiming(chapter);
+  const copyTiming = chapter.querySelector("[data-copy-timing]");
+  if (copyTiming) copyTiming.hidden = !timing;
+  status.textContent = message || (timing
+    ? `Saved timing: ${timing.rows.length} rows | ${timing.bpm.toFixed(1)} BPM`
+    : "No saved FSD timing");
+}
+
+async function copyChapterTiming(chapter) {
+  const timing = loadChapterTiming(chapter);
+  if (!timing) return;
+  const text = JSON.stringify(timing, null, 2);
+  let copied = false;
+  if (navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    } catch {}
+  }
+  if (!copied) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    document.body.append(textarea);
+    textarea.select();
+    copied = document.execCommand("copy");
+    textarea.remove();
+  }
+  if (!copied) throw new Error("Clipboard copy failed");
+  updateChapterTimingStatus(chapter, `Copied Chapter ${chapter.dataset.chapter} timing data`);
+}
+
+function completeChapterPlaybackRows(chapter) {
+  const firstRow = [...chapter.querySelectorAll(".syllable-line")]
+    .find((row) => beatCells(row).length > 0);
+  return firstRow ? buildPlaybackRows(firstRow) : [];
+}
+
+function calculateTimelineRows(fullRows, anchorIndex, audioTime, startCellIndex, bpm) {
+  const intervalSeconds = 60 / bpm;
+  const cellsBeforeAnchor = fullRows.slice(0, anchorIndex)
+    .reduce((total, entry) => total + entry.cells.length, 0);
+  let timestamp = audioTime - startCellIndex * intervalSeconds
+    - cellsBeforeAnchor * intervalSeconds;
+  return fullRows.map((entry, sequenceIndex) => {
+    const duration = entry.cells.length * intervalSeconds;
+    const rowTiming = {
+      sequenceIndex,
+      rowIndex: Number(entry.row.dataset.rowIndex),
+      repeatPass: entry.repeatPass,
+      timestamp,
+      bpm,
+      cellCount: entry.cells.length,
+      duration,
+    };
+    timestamp += duration;
+    return rowTiming;
+  });
+}
+
+function persistFsdTiming(state, startCellIndex) {
+  const chapter = state.playbackRows[0]?.chapter;
+  const audio = chapter?.querySelector("[data-chapter-audio]");
+  if (!chapter || !audio || audio.paused) return;
+
+  const fullRows = completeChapterPlaybackRows(chapter);
+  const anchor = state.playbackRows[0];
+  const anchorIndex = fullRows.findIndex((entry) => entry.row === anchor.row
+    && entry.repeatPass === anchor.repeatPass);
+  if (anchorIndex < 0) return;
+
+  const rows = calculateTimelineRows(fullRows, anchorIndex, audio.currentTime, startCellIndex, state.bpm);
+
+  const timing = {
+    schemaVersion: TIMING_SCHEMA_VERSION,
+    chapter: Number(chapter.dataset.chapter),
+    audioSrc: audio.getAttribute("src"),
+    audioDuration: Number.isFinite(audio.duration) ? audio.duration : null,
+    bpm: state.bpm,
+    updatedAt: new Date().toISOString(),
+    rows,
+  };
+  try {
+    localStorage.setItem(timingStorageKey(chapter), JSON.stringify(timing));
+    updateChapterTimingStatus(chapter, `Timing saved: ${rows.length} rows | ${state.bpm.toFixed(1)} BPM`);
+  } catch {
+    updateChapterTimingStatus(chapter, "Could not save FSD timing");
+  }
+}
+
+function stopAudioFsd() {
+  if (!audioFsdState) return;
+  fsdCell?.classList.remove("fsd-active");
+  fsdCell = null;
+  audioFsdState = null;
+  clearActiveRepeatIndicators();
+  updateRateBubble();
+}
+
+function startAudioFsd(chapter, audio, timing) {
+  if (!timing?.rows.length) return;
+  stopAudioFsd();
+  if (fsdState) stopFsd("Audio timing engaged");
+  audioFsdState = {
+    chapter,
+    audio,
+    timing,
+    currentSequenceIndex: -1,
+    currentCellIndex: -1,
+  };
+  updateChapterTimingStatus(chapter, `Audio FSD | ${timing.rows.length} rows | ${timing.bpm.toFixed(1)} BPM`);
+  updateRateBubble(timing.bpm);
+}
+
+function showAudioFsdBeforeStart(chapter, timing, state = null) {
+  fsdCell?.classList.remove("fsd-active");
+  fsdCell = null;
+  document.querySelector(".syllable-line.selected-row")?.classList.remove("selected-row");
+  if (state) {
+    state.currentSequenceIndex = -1;
+    state.currentCellIndex = -1;
+  }
+  checkboxCells(chapter).forEach((cell) => { cell.textContent = "[_]"; });
+  updateChapterTimingStatus(chapter, `FSD starts at ${timing.rows[0].timestamp.toFixed(3)}s`);
+}
+
+function renderAudioFsd() {
+  const state = audioFsdState;
+  if (!state || state.audio.paused) return;
+
+  const time = state.audio.currentTime;
+  const rows = state.timing.rows;
+  let sequenceIndex = -1;
+  for (let index = 0; index < rows.length; index += 1) {
+    if (rows[index].timestamp <= time) sequenceIndex = index;
+    else break;
+  }
+  if (sequenceIndex < 0) {
+    showAudioFsdBeforeStart(state.chapter, state.timing, state);
+    return;
+  }
+
+  const rowTiming = rows[sequenceIndex];
+  if (time >= rowTiming.timestamp + rowTiming.duration && sequenceIndex === rows.length - 1) {
+    stopAudioFsd();
+    updateChapterTimingStatus(state.chapter, "Audio FSD complete");
+    return;
+  }
+
+  const row = state.chapter.querySelector(`.syllable-line[data-row-index="${rowTiming.rowIndex}"]`);
+  const cells = beatCells(row);
+  const interval = 60 / rowTiming.bpm;
+  const cellIndex = Math.min(cells.length - 1, Math.max(0, Math.floor((time - rowTiming.timestamp) / interval)));
+  if (sequenceIndex !== state.currentSequenceIndex) {
+    state.currentSequenceIndex = sequenceIndex;
+    selectRow(row, "smooth", rowTiming.repeatPass !== null);
+    if (rowTiming.repeatPass !== null) setRepeatIndicator(state.chapter, rowTiming.repeatPass, true);
+    else checkboxCells(state.chapter).forEach((cell) => { cell.textContent = "[_]"; });
+  }
+  if (cellIndex !== state.currentCellIndex || fsdCell !== cells[cellIndex]) {
+    state.currentCellIndex = cellIndex;
+    fsdCell?.classList.remove("fsd-active");
+    fsdCell = cells[cellIndex];
+    fsdCell?.classList.add("fsd-active");
+    if (rowTiming.repeatPass !== null && fsdCell?.textContent.trim().toLowerCase() === "mak") {
+      setRepeatIndicator(state.chapter, rowTiming.repeatPass, false);
+    }
+  }
+  updateRateBubble(rowTiming.bpm);
+}
+
+function syncAudioFsd(chapter, audio) {
+  const state = audioFsdState?.audio === audio ? audioFsdState : null;
+  const timing = state?.timing || loadChapterTiming(chapter);
+  if (!timing) return;
+  if (audio.currentTime < timing.rows[0].timestamp) {
+    showAudioFsdBeforeStart(chapter, timing, state);
+    return;
+  }
+  if (audio.paused) return;
+  if (!state) startAudioFsd(chapter, audio, timing);
+  renderAudioFsd();
+}
+
+function audioFsdTick() {
+  renderAudioFsd();
+  requestAnimationFrame(audioFsdTick);
+}
+
+function setupChapterAudio() {
+  document.querySelectorAll(".chapter").forEach((chapter) => {
+    const audio = chapter.querySelector("[data-chapter-audio]");
+    updateChapterTimingStatus(chapter);
+    audio.addEventListener("play", () => {
+      document.querySelectorAll("[data-chapter-audio]").forEach((other) => {
+        if (other !== audio) other.pause();
+      });
+      const timing = loadChapterTiming(chapter);
+      if (timing) {
+        startAudioFsd(chapter, audio, timing);
+        renderAudioFsd();
+      }
+      else updateChapterTimingStatus(chapter, "Play and tap 5 rows to calibrate FSD");
+    });
+    audio.addEventListener("pause", () => {
+      if (audioFsdState?.audio === audio) stopAudioFsd();
+      if (fsdState?.chapter === chapter) stopFsd();
+      updateChapterTimingStatus(chapter);
+    });
+    audio.addEventListener("seeking", () => syncAudioFsd(chapter, audio));
+    audio.addEventListener("seeked", () => syncAudioFsd(chapter, audio));
+    audio.addEventListener("loadedmetadata", () => updateChapterTimingStatus(chapter));
+    chapter.querySelector("[data-copy-timing]").addEventListener("click", () => {
+      copyChapterTiming(chapter).catch(() => updateChapterTimingStatus(chapter, "Could not copy timing data"));
+    });
+  });
+  if (!audioFsdTickStarted) {
+    audioFsdTickStarted = true;
+    requestAnimationFrame(audioFsdTick);
+  }
+}
+
 function constrainBpm(candidate, current = null) {
   let constrained = Math.min(MAX_BPM, Math.max(MIN_BPM, candidate));
   if (current !== null) {
@@ -333,6 +627,7 @@ function startFsd(startRowIndex, bpm, statusLabel = "FSD engaged", startCellInde
   let cellIndex = startCellIndex;
   let lastPlaybackIndex = -1;
 
+  stopAudioFsd();
   stopFsd();
   const columns = playbackRows[0]?.cells.length || 0;
   const rowStarts = new Map();
@@ -350,7 +645,9 @@ function startFsd(startRowIndex, bpm, statusLabel = "FSD engaged", startCellInde
     currentCellIndex: startCellIndex,
     bpm,
     intervalMs,
+    chapter: playbackRows[0]?.chapter,
   };
+  persistFsdTiming(fsdState, startCellIndex);
   updateRateBubble(bpm);
   updateFsdStatus(
     `${statusLabel} | ${bpm.toFixed(1)} BPM | ${rowDurationSeconds(bpm, columns).toFixed(3)}s row`,
@@ -424,6 +721,31 @@ function adjustFsdFromTap(row, cell, tapTime) {
   const currentPlaybackIndex = fsdState.currentPlaybackIndex;
   const currentPlaybackRow = fsdState.playbackRows[currentPlaybackIndex];
   const nextPlaybackRow = fsdState.playbackRows[currentPlaybackIndex + 1];
+  const previousPlaybackRow = fsdState.playbackRows[currentPlaybackIndex - 1];
+  const currentScheduledStart = fsdState.rowStarts.get(currentPlaybackIndex);
+  const timeSinceTransition = tapTime - currentScheduledStart;
+  const adjacentRaceTap = timeSinceTransition >= 0
+    && timeSinceTransition <= EDGE_TAP_WINDOW_MS
+    && (row === previousPlaybackRow?.row || row === nextPlaybackRow?.row);
+
+  if (adjacentRaceTap && previousPlaybackRow) {
+    const columns = previousPlaybackRow.cells.length;
+    const expectedRowMs = fsdState.intervalMs * columns;
+    const candidateBpm = calculatePhaseAdjustedSyllableBpm(expectedRowMs, timeSinceTransition, columns);
+    if (!Number.isFinite(candidateBpm) || candidateBpm <= 0) return false;
+    const bpm = constrainBpm(candidateBpm, fsdState.bpm);
+    const limited = Math.abs(bpm - candidateBpm) > 0.001 ? ", limited" : "";
+    const currentRowIndex = fsdState.rows.indexOf(currentPlaybackRow.row);
+    startFsd(
+      currentRowIndex,
+      bpm,
+      `FSD edge correction (${(timeSinceTransition / 1000).toFixed(3)}s late${limited})`,
+      0,
+      currentPlaybackRow.repeatPass || 0,
+    );
+    return true;
+  }
+
   const isCurrent = row === currentPlaybackRow?.row;
   const isNext = row === nextPlaybackRow?.row;
   const isCurrentOrNext = isCurrent || isNext;
@@ -502,6 +824,10 @@ function setupCellTaps() {
     if (!cell) return;
 
     const row = cell.closest(".syllable-line");
+    if (audioFsdState) {
+      stopAudioFsd();
+      rowTapHistory = [];
+    }
     const value = cell.textContent.trim();
     if (value === "[_]" || value === "[ ]") {
       if (fsdState) stopFsd();
@@ -533,7 +859,18 @@ function registerServiceWorker() {
   const message = document.querySelector("[data-install-message]");
   if (!("serviceWorker" in navigator)) return;
 
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloading) return;
+    reloading = true;
+    window.setTimeout(() => location.reload(), 1000);
+  });
+
   navigator.serviceWorker.register("sw.js").then((registration) => {
+    registration.update().catch(() => {});
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") registration.update().catch(() => {});
+    });
     if (isIos() || isStandalone()) return;
     message.textContent = registration.active
       ? "Offline cache is active. Install is available from your browser menu if no button appears."
@@ -544,7 +881,12 @@ function registerServiceWorker() {
 }
 
 document.querySelector("[data-rate-bubble]")?.addEventListener("click", () => {
-  stopFsd();
+  if (audioFsdState) {
+    audioFsdState.audio.pause();
+    stopAudioFsd();
+  } else {
+    stopFsd();
+  }
   rowTapHistory = [];
 });
 
