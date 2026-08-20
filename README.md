@@ -62,13 +62,25 @@ isolated preview URL and temporarily replaces the currently published site.
 
 ```bash
 branch="$(git branch --show-current)"
+repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
 git push -u origin "$branch"
+gh api --method POST \
+  "repos/$repo/environments/github-pages/deployment-branch-policies" \
+  -f name="$branch" -f type=branch
 gh workflow run pages.yml --ref "$branch"
 gh run watch
 ```
 
 Push `main` or manually dispatch `pages.yml` from `main` to restore the default
-branch deployment.
+branch deployment. After restoring it, remove the temporary environment rule:
+
+```bash
+policy_id="$(BRANCH="$branch" gh api \
+  "repos/$repo/environments/github-pages/deployment-branch-policies" \
+  --jq '.branch_policies[] | select(.name == env.BRANCH) | .id')"
+gh api --method DELETE \
+  "repos/$repo/environments/github-pages/deployment-branch-policies/$policy_id"
+```
 
 ## Content Editing
 
