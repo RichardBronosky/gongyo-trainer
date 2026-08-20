@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Gongyo">
+  <rect width="512" height="512" rx="112" fill="#080a0f"/>
+  <circle cx="256" cy="256" r="184" fill="#102018" stroke="#86efac" stroke-width="18"/>
+  <path fill="#86efac" d="M153 255c0-62 43-108 106-108 38 0 70 16 91 43l-38 34c-13-17-30-26-52-26-32 0-55 23-55 57s23 57 58 57c18 0 34-5 47-15v-24h-58v-45h110v95c-26 25-63 40-101 40-65 0-108-46-108-108Z"/>
+</svg>

@@ -1,0 +1,280 @@
+:root {
+  color-scheme: dark;
+  --bg: #080a0f;
+  --panel: #10151f;
+  --panel-soft: #171f2d;
+  --text: #f6f7fb;
+  --muted: #9aa4b8;
+  --accent: #86efac;
+  --border: #273244;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #111827 0, var(--bg) 320px);
+  color: var(--text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.page-header,
+.ritual-card {
+  width: min(900px, 100%);
+  margin-inline: auto;
+}
+
+.page-header {
+  padding: clamp(18px, 4vw, 40px) clamp(12px, 3vw, 28px) 18px;
+}
+
+.title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2.3rem, 9vw, 5.4rem);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+}
+
+.build-version {
+  color: rgb(154 164 184 / 0.5);
+  font: 700 0.82rem ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.trainer-link {
+  display: inline-block;
+  margin-top: 14px;
+  color: var(--muted);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.trainer-link:hover,
+.trainer-link:focus-visible,
+.ritual-label a:hover,
+.ritual-label a:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.ritual-card {
+  padding: clamp(12px, 3vw, 24px);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: rgb(16 21 31 / 0.95);
+  box-shadow: 0 20px 70px rgb(0 0 0 / 0.28);
+}
+
+.ritual-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ritual-list .ritual-list {
+  margin: 7px 0 0 24px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+.ritual-item {
+  scroll-margin-top: 12px;
+}
+
+.ritual-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 7px 9px;
+  border: 1px solid rgb(255 255 255 / 0.055);
+  border-radius: 11px;
+  background: var(--panel-soft);
+}
+
+.ritual-item.completed > .ritual-row {
+  opacity: 0.58;
+}
+
+.ritual-item.collapsed > .ritual-list {
+  display: none;
+}
+
+.ritual-toggle {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: #0c1119;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ritual-toggle:disabled {
+  opacity: 0.35;
+}
+
+.ritual-spacer {
+  width: 30px;
+}
+
+.ritual-check {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.ritual-label {
+  flex: 1;
+  line-height: 1.3;
+}
+
+.timer-label {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.timer-minutes {
+  width: 3rem;
+  min-height: 32px;
+  padding: 0 3px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #0c1119;
+  color: var(--text);
+  font: 700 1rem ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.ritual-timer-check {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #0c1119;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.ritual-label a {
+  color: var(--accent);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.ritual-notes {
+  display: grid;
+  gap: 5px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.ritual-footer-link {
+  margin-top: 18px;
+}
+
+.kanji {
+  font-size: 3em;
+  line-height: 1;
+}
+
+.timer-overlay {
+  position: fixed;
+  z-index: 2000;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px;
+  background: #080a0f;
+  color: var(--text);
+  text-align: center;
+}
+
+.timer-overlay[hidden] {
+  display: none;
+}
+
+.timer-title,
+.timer-hint {
+  margin: 0;
+  color: currentColor;
+}
+
+.timer-title {
+  font-size: clamp(1.2rem, 5vw, 2rem);
+  font-weight: 750;
+}
+
+.timer-display {
+  font: 800 clamp(4rem, 22vw, 10rem)/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: -0.07em;
+}
+
+.timer-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.timer-controls button {
+  min-width: 48px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid currentColor;
+  border-radius: 12px;
+  background: transparent;
+  color: currentColor;
+  font: inherit;
+  cursor: pointer;
+}
+
+.timer-overlay.alarming {
+  animation: timer-alarm 1s steps(1, end) infinite;
+  cursor: pointer;
+}
+
+@keyframes timer-alarm {
+  0%, 49.999% {
+    background: #fff;
+    color: #000;
+  }
+
+  50%, 100% {
+    background: #000;
+    color: #fff;
+  }
+}
+
+@media (max-width: 560px) {
+  .ritual-card {
+    width: calc(100% - 12px);
+    border-radius: 16px;
+  }
+
+  .ritual-list .ritual-list {
+    margin-left: 12px;
+    padding-left: 8px;
+  }
+}

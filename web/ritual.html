@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080a0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Gongyo">
+    <title>Gongyo Ritual</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="assets/icons/gongyo-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/icons/gongyo-icon-192.png">
+    <link rel="stylesheet" href="src/ritual.css">
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="title-line">
+        <h1>Gongyo Ritual</h1>
+        <span class="build-version">v18</span>
+      </div>
+      <a class="trainer-link" href="syllables.html">Open Trainer</a>
+    </header>
+
+    <main class="ritual-card">
+      <div data-ritual-tree aria-live="polite">Loading ritual...</div>
+      <a class="trainer-link ritual-footer-link" href="syllables.html">Open Trainer</a>
+      <div class="ritual-notes" data-ritual-notes></div>
+    </main>
+
+    <div class="timer-overlay" data-timer-overlay hidden>
+      <p class="timer-title">Daimoku</p>
+      <output class="timer-display" data-timer-display>00:00</output>
+      <p class="timer-hint" data-timer-hint>Timer running</p>
+      <div class="timer-controls" data-timer-controls>
+        <button type="button" data-timer-minus aria-label="Subtract one minute">➖</button>
+        <button type="button" data-timer-back>Back</button>
+        <button type="button" data-timer-plus aria-label="Add one minute">➕</button>
+      </div>
+    </div>
+
+    <script src="src/ritual.js"></script>
+  </body>
+</html>
