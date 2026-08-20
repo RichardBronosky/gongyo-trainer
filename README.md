@@ -5,7 +5,7 @@ A static, installable Gongyo ritual checklist and paced reading trainer. The app
 ## Pages
 
 - `web/ritual.html` renders the nested ritual checklist from `web/assets/ritual.txt`.
-- `web/syllables.html` renders Chapters 2 and 16 from `web/assets/syllables.5-wide.txt` with seekable chapter audio and persisted audio-synchronized pacing.
+- `web/syllables.html` renders Chapters 2 and 16 from `web/assets/syllables.5-wide.txt` with seekable chapter audio and local, portable audio-synchronized timing data.
 - `web/index.html` redirects to the ritual page.
 
 ## Local Development
@@ -53,6 +53,22 @@ After creating the GitHub repository:
 4. Wait for the `Deploy GitHub Pages` workflow to complete.
 
 The expected project URL is `https://<owner>.github.io/gongyo-trainer/`.
+
+### Feature Branch Preview
+
+The Pages workflow supports manual dispatch from a pushed feature branch. This
+deploys that branch's `web/` directory to the normal Pages URL; it is not an
+isolated preview URL and temporarily replaces the currently published site.
+
+```bash
+branch="$(git branch --show-current)"
+git push -u origin "$branch"
+gh workflow run pages.yml --ref "$branch"
+gh run watch
+```
+
+Push `main` or manually dispatch `pages.yml` from `main` to restore the default
+branch deployment.
 
 ## Content Editing
 

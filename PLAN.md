@@ -13,6 +13,10 @@ The application must:
 - Support one-handed phone use during the ritual.
 - Preserve precise pacing and repetition behavior in the trainer.
 
+### Product Focus
+
+Gongyo Trainer exists to help a practitioner learn, rehearse, and perform the Buddhist practice of Gongyo with decreasing dependence on the application. A feature belongs in this project when it directly improves learning, pacing, ritual continuity, accessibility, or ownership of personal practice data.
+
 ## 2. Non-Goals
 
 Do not add the following to this repository:
@@ -21,6 +25,8 @@ Do not add the following to this repository:
 - Timing-review or splice-review interfaces.
 - Beat collection data or reconciliation tools.
 - Deployed servers, backends, or APIs. The local-only server under `internal/` is development tooling.
+- User accounts, hosted storage, cloud synchronization, telemetry, or analytics.
+- General-purpose media, personalization, or project-management systems.
 - Generated media artifacts.
 - Frameworks, package managers, bundlers, or runtime dependencies unless a future requirement cannot reasonably be met with browser APIs.
 
@@ -123,6 +129,17 @@ The implementation should remain data-oriented enough to support additional repe
 - Saved timing drives highlighting during later playback, including forward and backward seeking.
 - Each chapter reports timing status and provides a JSON copy action with a legacy clipboard fallback.
 
+### Personalization and Data Ownership
+
+- Timing personalization is local-first and belongs to the practitioner.
+- Timing data can be exported as human-readable JSON and imported on another origin, browser, or device.
+- Import is available beside the copy action and accepts pasted or clipboard JSON.
+- Before replacing saved timing, an import must validate its schema version, chapter, relative audio source, and current chapter structure, then confirm the destination chapter with the practitioner.
+- Invalid data must leave known-good timing unchanged and report why it was rejected.
+- A successful import stores the timing under the chapter's existing `localStorage` key and immediately refreshes its timing status.
+- Personal timing data is never committed to the repository. Shared default timing would require a separate explicit product decision.
+- Personalization does not require accounts, uploads, telemetry, a backend, or cloud synchronization.
+
 ## 5. Content Formats
 
 ### `web/assets/ritual.txt`
@@ -165,6 +182,7 @@ The application intentionally uses browser-native HTML, CSS, and JavaScript.
 
 All runtime URLs must remain relative so the app works below the GitHub Pages project path `/gongyo-trainer/`.
 The deployed application remains entirely static: `.github/workflows/pages.yml` publishes only `web/`, never `internal/` or other repository tooling.
+Development conveniences must remain subordinate to the practitioner-facing application and must not introduce production services or runtime dependencies.
 
 ## 7. Offline and Versioning Contract
 

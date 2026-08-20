@@ -187,7 +187,15 @@ code {
   text-align: right;
 }
 
-.copy-timing {
+.timing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.copy-timing,
+.import-timing {
   min-height: 42px;
   padding: 0 9px;
   color: var(--muted);
@@ -364,6 +372,10 @@ code {
 
   .timing-status {
     text-align: left;
+  }
+
+  .timing-actions {
+    justify-content: flex-start;
   }
 
   .syllable-line {

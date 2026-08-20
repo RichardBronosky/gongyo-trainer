@@ -103,7 +103,9 @@ function createChapter(chapter, index) {
   const audioWrap = document.createElement("div");
   const audio = document.createElement("audio");
   const timingStatus = document.createElement("span");
+  const timingActions = document.createElement("div");
   const copyTiming = document.createElement("button");
+  const importTiming = document.createElement("button");
   const chapterNumber = index === 0 ? 2 : 16;
 
   section.className = "chapter";
@@ -123,13 +125,21 @@ function createChapter(chapter, index) {
   audio.dataset.chapterAudio = "";
   timingStatus.className = "timing-status";
   timingStatus.dataset.timingStatus = "";
+  timingStatus.setAttribute("role", "status");
+  timingStatus.setAttribute("aria-live", "polite");
   timingStatus.textContent = "No saved FSD timing";
+  timingActions.className = "timing-actions";
   copyTiming.type = "button";
   copyTiming.className = "copy-timing";
   copyTiming.dataset.copyTiming = "";
   copyTiming.textContent = "Copy timing data";
   copyTiming.hidden = true;
-  audioWrap.append(audio, timingStatus, copyTiming);
+  importTiming.type = "button";
+  importTiming.className = "import-timing";
+  importTiming.dataset.importTiming = "";
+  importTiming.textContent = "Import timing data";
+  timingActions.append(copyTiming, importTiming);
+  audioWrap.append(audio, timingStatus, timingActions);
   ritualLink.className = "ritual-back-link";
   ritualLink.href = `ritual.html#ritual-chapter-${chapterNumber}`;
   ritualLink.textContent = "Back to ritual";
@@ -352,36 +362,72 @@ function timingStorageKey(chapter) {
   return `gongyo.fsd.chapter${chapter.dataset.chapter}`;
 }
 
+function invalidTiming(reason) {
+  return { timing: null, reason };
+}
+
+function validateChapterTiming(chapter, timing) {
+  if (!timing || typeof timing !== "object" || Array.isArray(timing)) {
+    return invalidTiming("timing data must be a JSON object");
+  }
+  if (timing.schemaVersion !== TIMING_SCHEMA_VERSION) {
+    return invalidTiming(`unsupported schema version; expected ${TIMING_SCHEMA_VERSION}`);
+  }
+
+  const chapterNumber = Number(chapter.dataset.chapter);
+  if (timing.chapter !== chapterNumber) {
+    return invalidTiming(`timing is for Chapter ${timing.chapter ?? "unknown"}, not Chapter ${chapterNumber}`);
+  }
+
+  const audio = chapter.querySelector("[data-chapter-audio]");
+  const expectedAudioSrc = audio?.getAttribute("src");
+  if (typeof timing.audioSrc !== "string"
+    || /^(?:[a-z][a-z\d+.-]*:|\/\/|\/)/i.test(timing.audioSrc)) {
+    return invalidTiming("audio source must be a relative URL");
+  }
+  if (timing.audioSrc !== expectedAudioSrc) {
+    return invalidTiming(`audio source does not match Chapter ${chapterNumber}`);
+  }
+  if (!Number.isFinite(timing.bpm) || timing.bpm <= 0) {
+    return invalidTiming("timing BPM must be a positive number");
+  }
+
+  const expectedRows = completeChapterPlaybackRows(chapter);
+  if (!Array.isArray(timing.rows) || timing.rows.length === 0) {
+    return invalidTiming("timing rows must be a non-empty array");
+  }
+  if (timing.rows.length !== expectedRows.length) {
+    return invalidTiming(`row count does not match the current Chapter ${chapterNumber} structure`);
+  }
+
+  const invalidRowIndex = timing.rows.findIndex((row, index) => {
+    const expected = expectedRows[index];
+    const previous = timing.rows[index - 1];
+    const expectedRepeatPass = expected.repeatPass;
+    return !row || typeof row !== "object"
+      || !Number.isInteger(row.sequenceIndex) || row.sequenceIndex !== index
+      || !Number.isInteger(row.rowIndex) || row.rowIndex !== Number(expected.row.dataset.rowIndex)
+      || (row.repeatPass === null
+        ? expectedRepeatPass !== null
+        : !Number.isInteger(row.repeatPass) || row.repeatPass < 0 || row.repeatPass >= 3
+          || row.repeatPass !== expectedRepeatPass)
+      || !Number.isFinite(row.timestamp)
+      || (previous && row.timestamp < previous.timestamp)
+      || !Number.isFinite(row.duration) || row.duration <= 0
+      || !Number.isFinite(row.bpm) || row.bpm <= 0
+      || !Number.isInteger(row.cellCount) || row.cellCount <= 0
+      || row.cellCount !== expected.cells.length;
+  });
+  if (invalidRowIndex >= 0) {
+    return invalidTiming(`row ${invalidRowIndex + 1} does not match the current Chapter ${chapterNumber} structure`);
+  }
+  return { timing, reason: null };
+}
+
 function loadChapterTiming(chapter) {
   try {
     const timing = JSON.parse(localStorage.getItem(timingStorageKey(chapter)));
-    const audio = chapter.querySelector("[data-chapter-audio]");
-    const expectedRows = completeChapterPlaybackRows(chapter);
-    if (timing?.schemaVersion !== TIMING_SCHEMA_VERSION
-      || timing.chapter !== Number(chapter.dataset.chapter)
-      || timing.audioSrc !== audio?.getAttribute("src")
-      || !Number.isFinite(timing.bpm) || timing.bpm <= 0
-      || !Array.isArray(timing.rows) || timing.rows.length !== expectedRows.length
-      || timing.rows.length === 0) return null;
-
-    const validRows = timing.rows.every((row, index) => {
-      const expected = expectedRows[index];
-      const previous = timing.rows[index - 1];
-      const expectedRepeatPass = expected.repeatPass;
-      return Number.isInteger(row.sequenceIndex) && row.sequenceIndex === index
-        && Number.isInteger(row.rowIndex) && row.rowIndex === Number(expected.row.dataset.rowIndex)
-        && (row.repeatPass === null
-          ? expectedRepeatPass === null
-          : Number.isInteger(row.repeatPass) && row.repeatPass >= 0 && row.repeatPass < 3
-            && row.repeatPass === expectedRepeatPass)
-        && Number.isFinite(row.timestamp)
-        && (!previous || row.timestamp >= previous.timestamp)
-        && Number.isFinite(row.duration) && row.duration > 0
-        && Number.isFinite(row.bpm) && row.bpm > 0
-        && Number.isInteger(row.cellCount) && row.cellCount > 0
-        && row.cellCount === expected.cells.length;
-    });
-    return validRows ? timing : null;
+    return validateChapterTiming(chapter, timing).timing;
   } catch {
     return null;
   }
@@ -419,6 +465,53 @@ async function copyChapterTiming(chapter) {
   }
   if (!copied) throw new Error("Clipboard copy failed");
   updateChapterTimingStatus(chapter, `Copied Chapter ${chapter.dataset.chapter} timing data`);
+}
+
+async function readTimingImportText(chapter) {
+  if (navigator.clipboard?.readText) {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) return text;
+    } catch {}
+  }
+  return window.prompt(`Paste Chapter ${chapter.dataset.chapter} timing JSON:`);
+}
+
+async function importChapterTiming(chapter) {
+  const chapterNumber = Number(chapter.dataset.chapter);
+  const text = await readTimingImportText(chapter);
+  if (text === null) {
+    updateChapterTimingStatus(chapter, "Timing import cancelled");
+    return;
+  }
+
+  let timing;
+  try {
+    timing = JSON.parse(text);
+  } catch {
+    updateChapterTimingStatus(chapter, "Import rejected: invalid JSON");
+    return;
+  }
+
+  const validation = validateChapterTiming(chapter, timing);
+  if (!validation.timing) {
+    updateChapterTimingStatus(chapter, `Import rejected: ${validation.reason}`);
+    return;
+  }
+
+  if (loadChapterTiming(chapter)
+    && !window.confirm(`Replace valid saved timing for Chapter ${chapterNumber} with imported Chapter ${timing.chapter} timing?`)) {
+    updateChapterTimingStatus(chapter, "Timing import cancelled; saved timing unchanged");
+    return;
+  }
+
+  try {
+    localStorage.setItem(timingStorageKey(chapter), JSON.stringify(validation.timing));
+    updateChapterTimingStatus(chapter,
+      `Imported Chapter ${chapterNumber} timing: ${timing.rows.length} rows | ${timing.bpm.toFixed(1)} BPM`);
+  } catch {
+    updateChapterTimingStatus(chapter, "Could not save imported timing");
+  }
 }
 
 function completeChapterPlaybackRows(chapter) {
@@ -603,6 +696,9 @@ function setupChapterAudio() {
     audio.addEventListener("loadedmetadata", () => updateChapterTimingStatus(chapter));
     chapter.querySelector("[data-copy-timing]").addEventListener("click", () => {
       copyChapterTiming(chapter).catch(() => updateChapterTimingStatus(chapter, "Could not copy timing data"));
+    });
+    chapter.querySelector("[data-import-timing]").addEventListener("click", () => {
+      importChapterTiming(chapter).catch(() => updateChapterTimingStatus(chapter, "Could not import timing data"));
     });
   });
   if (!audioFsdTickStarted) {
