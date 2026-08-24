@@ -97,6 +97,11 @@ function createChapter(chapter, index) {
   const section = document.createElement("section");
   const header = document.createElement("div");
   const title = document.createElement("a");
+  const controls = document.createElement("div");
+  const clickToggle = document.createElement("label");
+  const clickToggleInput = document.createElement("input");
+  const clickToggleTrack = document.createElement("span");
+  const clickToggleText = document.createElement("span");
   const headingLines = document.createElement("div");
   const lines = document.createElement("div");
   const ritualLink = document.createElement("a");
@@ -118,6 +123,16 @@ function createChapter(chapter, index) {
   title.href = chapterLinks[index]?.href || "#";
   title.target = "_blank";
   title.rel = "noreferrer";
+  controls.className = "chapter-controls";
+  clickToggle.className = "click-track-toggle";
+  clickToggleInput.type = "checkbox";
+  clickToggleInput.setAttribute("role", "switch");
+  clickToggleInput.dataset.clickTrackToggle = "";
+  clickToggleInput.checked = clickTrackEnabled;
+  clickToggleTrack.className = "click-track-switch";
+  clickToggleTrack.setAttribute("aria-hidden", "true");
+  clickToggleText.textContent = "Click track";
+  clickToggle.append(clickToggleInput, clickToggleTrack, clickToggleText);
   audioWrap.className = "chapter-audio";
   audio.controls = true;
   audio.preload = "metadata";
@@ -150,7 +165,8 @@ function createChapter(chapter, index) {
     lines.append(createLine(line, columns));
     if (/\[[ _]\]/.test(line)) columns = 7;
   });
-  header.append(title, audioWrap);
+  controls.append(clickToggle, audioWrap);
+  header.append(title, controls);
   section.append(header, headingLines, lines, ritualLink);
   section.dataset.chapter = String(chapterNumber);
   section.querySelectorAll(".syllable-line").forEach((row, rowIndex) => {
@@ -228,11 +244,131 @@ let fsdCell = null;
 let fsdState = null;
 let audioFsdState = null;
 let audioFsdTickStarted = false;
+const CLICK_TRACK_STORAGE_KEY = "gongyo.clickTrack";
+const CLICK_SCHEDULE_AHEAD_SECONDS = 0.15;
+let clickTrackEnabled = loadClickTrackEnabled();
+let clickAudioContext = null;
+let scheduledClicks = [];
+let recordedClickState = null;
+let recordedClickTimer = null;
 const MIN_BPM = 20;
 const MAX_BPM = 240;
 const MAX_RATE_CHANGE = 0.10;
 const EDGE_TAP_WINDOW_MS = 450;
 const TIMING_SCHEMA_VERSION = 1;
+
+function loadClickTrackEnabled() {
+  try {
+    return localStorage.getItem(CLICK_TRACK_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function ensureClickAudio() {
+  if (!clickTrackEnabled) return null;
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return null;
+  if (!clickAudioContext) clickAudioContext = new AudioContext();
+  if (clickAudioContext.state === "suspended") clickAudioContext.resume().catch(() => {});
+  return clickAudioContext;
+}
+
+function scheduleClick(time) {
+  const context = ensureClickAudio();
+  if (!context) return;
+
+  const startTime = Math.max(time, context.currentTime + 0.003);
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.frequency.setValueAtTime(1400, startTime);
+  gain.gain.setValueAtTime(0.0001, startTime);
+  gain.gain.linearRampToValueAtTime(0.16, startTime + 0.002);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.03);
+  oscillator.connect(gain).connect(context.destination);
+  oscillator.start(startTime);
+  oscillator.stop(startTime + 0.035);
+
+  const scheduled = { oscillator, startTime };
+  scheduledClicks.push(scheduled);
+  oscillator.addEventListener("ended", () => {
+    scheduledClicks = scheduledClicks.filter((entry) => entry !== scheduled);
+    oscillator.disconnect();
+    gain.disconnect();
+  }, { once: true });
+}
+
+function cancelScheduledClicks() {
+  const context = clickAudioContext;
+  scheduledClicks.forEach(({ oscillator }) => {
+    try {
+      oscillator.stop(context?.currentTime || 0);
+    } catch {}
+  });
+  scheduledClicks = [];
+}
+
+function stopRecordedClicks() {
+  if (recordedClickTimer !== null) window.clearInterval(recordedClickTimer);
+  recordedClickTimer = null;
+  recordedClickState = null;
+  cancelScheduledClicks();
+}
+
+function scheduleRecordedClicks() {
+  const state = recordedClickState;
+  const context = clickAudioContext;
+  if (!state || !context || context.state !== "running"
+    || state.audio.paused || state.audio.seeking || !clickTrackEnabled) return;
+
+  const mediaTime = state.audio.currentTime;
+  const rate = state.audio.playbackRate;
+  const mediaHorizon = mediaTime + CLICK_SCHEDULE_AHEAD_SECONDS * rate;
+  while (state.nextIndex < state.beats.length && state.beats[state.nextIndex] <= mediaHorizon) {
+    const beatTime = state.beats[state.nextIndex];
+    state.nextIndex += 1;
+    if (beatTime < mediaTime - 0.03) continue;
+    scheduleClick(context.currentTime + (beatTime - mediaTime) / rate);
+  }
+}
+
+function startRecordedClicks(audio, timing) {
+  stopRecordedClicks();
+  const context = ensureClickAudio();
+  if (!context || audio.paused || !timing?.rows.length || fsdState) return;
+
+  const beats = timing.rows.flatMap((row) => Array.from(
+    { length: row.cellCount },
+    (_, cellIndex) => row.timestamp + cellIndex * 60 / row.bpm,
+  ));
+  const nextIndex = beats.findIndex((time) => time >= audio.currentTime - 0.03);
+  recordedClickState = {
+    audio,
+    beats,
+    nextIndex: nextIndex < 0 ? beats.length : nextIndex,
+  };
+  scheduleRecordedClicks();
+  recordedClickTimer = window.setInterval(scheduleRecordedClicks, 25);
+}
+
+function setClickTrackEnabled(enabled) {
+  clickTrackEnabled = enabled;
+  try {
+    localStorage.setItem(CLICK_TRACK_STORAGE_KEY, String(enabled));
+  } catch {}
+  document.querySelectorAll("[data-click-track-toggle]").forEach((toggle) => {
+    toggle.checked = enabled;
+  });
+
+  if (!enabled) {
+    stopRecordedClicks();
+    return;
+  }
+  ensureClickAudio();
+  if (audioFsdState && !audioFsdState.audio.paused) {
+    startRecordedClicks(audioFsdState.audio, audioFsdState.timing);
+  }
+}
 
 function scrollRowToReadingPosition(row, behavior = "smooth") {
   const rect = row.getBoundingClientRect();
@@ -287,6 +423,7 @@ function updateRateBubble(bpm = null) {
 function stopFsd(message = "FSD disengaged. Tap five consecutive rows to restart.") {
   if (fsdTimer !== null) window.clearTimeout(fsdTimer);
   fsdTimer = null;
+  cancelScheduledClicks();
   fsdCell?.classList.remove("fsd-active");
   fsdCell = null;
   fsdState = null;
@@ -509,6 +646,11 @@ async function importChapterTiming(chapter) {
     localStorage.setItem(timingStorageKey(chapter), JSON.stringify(validation.timing));
     updateChapterTimingStatus(chapter,
       `Imported Chapter ${chapterNumber} timing: ${timing.rows.length} rows | ${timing.bpm.toFixed(1)} BPM`);
+    const audio = chapter.querySelector("[data-chapter-audio]");
+    if (audio && !audio.paused) {
+      startAudioFsd(chapter, audio, validation.timing);
+      renderAudioFsd();
+    }
   } catch {
     updateChapterTimingStatus(chapter, "Could not save imported timing");
   }
@@ -574,6 +716,7 @@ function persistFsdTiming(state, startCellIndex) {
 
 function stopAudioFsd() {
   if (!audioFsdState) return;
+  stopRecordedClicks();
   fsdCell?.classList.remove("fsd-active");
   fsdCell = null;
   audioFsdState = null;
@@ -592,6 +735,7 @@ function startAudioFsd(chapter, audio, timing) {
     currentSequenceIndex: -1,
     currentCellIndex: -1,
   };
+  startRecordedClicks(audio, timing);
   updateChapterTimingStatus(chapter, `Audio FSD | ${timing.rows.length} rows | ${timing.bpm.toFixed(1)} BPM`);
   updateRateBubble(timing.bpm);
 }
@@ -675,7 +819,11 @@ function setupChapterAudio() {
   document.querySelectorAll(".chapter").forEach((chapter) => {
     const audio = chapter.querySelector("[data-chapter-audio]");
     updateChapterTimingStatus(chapter);
+    chapter.querySelector("[data-click-track-toggle]").addEventListener("change", (event) => {
+      setClickTrackEnabled(event.currentTarget.checked);
+    });
     audio.addEventListener("play", () => {
+      ensureClickAudio();
       document.querySelectorAll("[data-chapter-audio]").forEach((other) => {
         if (other !== audio) other.pause();
       });
@@ -691,8 +839,25 @@ function setupChapterAudio() {
       if (fsdState?.chapter === chapter) stopFsd();
       updateChapterTimingStatus(chapter);
     });
-    audio.addEventListener("seeking", () => syncAudioFsd(chapter, audio));
-    audio.addEventListener("seeked", () => syncAudioFsd(chapter, audio));
+    audio.addEventListener("seeking", () => {
+      stopRecordedClicks();
+      syncAudioFsd(chapter, audio);
+    });
+    audio.addEventListener("seeked", () => {
+      syncAudioFsd(chapter, audio);
+      if (audioFsdState?.audio === audio && !audio.paused) {
+        startRecordedClicks(audio, audioFsdState.timing);
+      }
+    });
+    audio.addEventListener("ratechange", () => {
+      if (audioFsdState?.audio === audio && !audio.paused) {
+        startRecordedClicks(audio, audioFsdState.timing);
+      }
+    });
+    audio.addEventListener("ended", () => {
+      if (audioFsdState?.audio === audio) stopAudioFsd();
+      updateChapterTimingStatus(chapter);
+    });
     audio.addEventListener("loadedmetadata", () => updateChapterTimingStatus(chapter));
     chapter.querySelector("[data-copy-timing]").addEventListener("click", () => {
       copyChapterTiming(chapter).catch(() => updateChapterTimingStatus(chapter, "Could not copy timing data"));
@@ -724,7 +889,9 @@ function startFsd(startRowIndex, bpm, statusLabel = "FSD engaged", startCellInde
   let lastPlaybackIndex = -1;
 
   stopAudioFsd();
+  stopRecordedClicks();
   stopFsd();
+  ensureClickAudio();
   const columns = playbackRows[0]?.cells.length || 0;
   const rowStarts = new Map();
   let scheduledAt = performance.now() - startCellIndex * intervalMs;
@@ -774,6 +941,7 @@ function startFsd(startRowIndex, bpm, statusLabel = "FSD engaged", startCellInde
     fsdState.currentCellIndex = cellIndex;
     fsdCell = cells[cellIndex];
     fsdCell?.classList.add("fsd-active");
+    if (fsdCell) scheduleClick(clickAudioContext?.currentTime || 0);
     if (playbackRow.repeatPass !== null && fsdCell?.textContent.trim().toLowerCase() === "mak") {
       setRepeatIndicator(playbackRow.chapter, playbackRow.repeatPass, false);
     }

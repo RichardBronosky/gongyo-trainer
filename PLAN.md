@@ -45,6 +45,8 @@ Behavior:
 - Lines beginning with `-` are nested explanatory/action items without checkboxes.
 - Parent items have explicit expand/collapse controls.
 - Completing a parent collapses its descendants.
+- Completion state persists locally until the practitioner uses the Ritual reset control.
+- Reset clears completion and Daimoku timer state immediately; until any restored value is changed, tapping it again swaps between the reset and previous state.
 - Recitation actions link to the corresponding trainer chapter.
 - Non-list lines render as notes below the checklist.
 - Kanji runs render at three times the surrounding text size.
@@ -59,12 +61,15 @@ The Daimoku line contains a timer placeholder:
 The renderer replaces the placeholder with:
 
 - A persisted numeric minute selector.
-- An hourglass start/completion control.
+- A normal completion checkbox independent from the timer.
 - A full-screen countdown with add/subtract minute controls.
-- A flashing black/white completion state that requires acknowledgement.
-- Automatic completion and child collapse after acknowledgement.
+- Row-tap start/resume behavior that runs only while the timer and browser tab are visible.
+- Persisted active elapsed time that pauses when the timer is hidden.
+- A flashing black/white completion state that continues counting total active time.
+- A Chill control that stops flashing without stopping or closing the timer.
+- The current local time.
 
-The selected minute value is stored under `localStorage` key `gongyo.daimokuMinutes`.
+Ritual completion, timer, and temporary reset/restore state are stored locally. The selected minute value remains mirrored under `localStorage` key `gongyo.daimokuMinutes`.
 
 ### Trainer View
 
@@ -86,6 +91,8 @@ Behavior:
 Chapter labels link to the externally hosted reference files. Each chapter ends with a link back to its exact Ritual checklist item.
 
 Each chapter also has native audio controls backed by its approved relative M4A asset. Playback supports pause, resume, and timeline seeking; only one chapter plays at a time. Pausing removes the active FSD highlight without resetting the audio playhead, and resumed or seeked playback follows `audio.currentTime` using saved timing.
+
+Each chapter header also contains the same persisted Click track switch. The switches remain synchronized and produce one synthesized click per FSD beat during both live FSD and saved-timing audio playback. Recorded-audio clicks are scheduled against `audio.currentTime`, including seeking, playback-rate changes, and repeated Chapter 2 passes.
 
 ## 4. Self-Driving Mode
 
@@ -235,8 +242,11 @@ Deployment acceptance:
 - Completing a parent collapses children.
 - Chapter links navigate to the correct trainer anchor.
 - Timer minutes survive refresh and cache upgrades.
-- Minus-to-zero enters flashing completion mode.
-- Acknowledgement completes and collapses Daimoku.
+- Ritual completion and timer progress survive refresh and cache upgrades until reset.
+- The timer advances only while its overlay and browser tab are visible.
+- Minus-to-zero enters flashing completion mode without losing total active time.
+- Chill stops flashing while total active time continues.
+- Reset and restore swap states until the practitioner changes a restored value.
 
 ### Trainer
 
@@ -247,6 +257,8 @@ Deployment acceptance:
 - FSD stops at chapter boundaries.
 - Active cell remains visually distinct from active row.
 - Backlinks return to exact Ritual items.
+- Both Click track switches remain synchronized.
+- Clicks follow live FSD and saved audio timing through pause, seek, rate, and repeated-section transitions.
 
 ### Mobile and PWA
 
@@ -259,7 +271,6 @@ Deployment acceptance:
 
 Potential improvements, requiring product confirmation before implementation:
 
-- Persist Ritual completion state for interrupted rituals.
 - Generalize repeated sections into explicit content metadata instead of marker inference.
 - Add accessible announcements for FSD and timer state changes.
 - Add deterministic browser tests for parsers, repetition, and timer transitions.

@@ -63,6 +63,24 @@ h1 {
   text-decoration: underline;
 }
 
+.page-actions {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.reset-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-soft);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .ritual-card {
   padding: clamp(12px, 3vw, 24px);
   border: 1px solid var(--border);
@@ -164,18 +182,6 @@ h1 {
   font: 700 1rem ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
-.ritual-timer-check {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: #0c1119;
-  font-size: 1.1rem;
-  cursor: pointer;
-}
-
 .ritual-label a,
 .ritual-label a:hover,
 .ritual-label a:focus-visible {
@@ -232,6 +238,11 @@ h1 {
   font-weight: 750;
 }
 
+.timer-clock {
+  color: var(--muted);
+  font: 700 clamp(1.1rem, 5vw, 1.6rem) ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
 .timer-display {
   font: 800 clamp(4rem, 22vw, 10rem)/1 ui-monospace, SFMono-Regular, Consolas, monospace;
   letter-spacing: -0.07em;
@@ -242,7 +253,8 @@ h1 {
   gap: 10px;
 }
 
-.timer-controls button {
+.timer-controls button,
+.timer-chill {
   min-width: 48px;
   min-height: 44px;
   padding: 0 14px;
@@ -254,9 +266,16 @@ h1 {
   cursor: pointer;
 }
 
+.timer-chill {
+  min-width: 7rem;
+}
+
 .timer-overlay.alarming {
   animation: timer-alarm 1s steps(1, end) infinite;
-  cursor: pointer;
+}
+
+.timer-overlay.alarming .timer-clock {
+  color: currentColor;
 }
 
 @keyframes timer-alarm {
