@@ -248,6 +248,7 @@ function renderNodes(nodes) {
       row.append(hourglass);
     } else if (node.marker === "*") {
       const checkbox = document.createElement("input");
+      row.classList.add("checkable");
       checkbox.type = "checkbox";
       checkbox.className = "ritual-check";
       checkbox.setAttribute("aria-label", `Complete ${node.text}`);
@@ -261,6 +262,10 @@ function renderNodes(nodes) {
         toggle.setAttribute("aria-expanded", String(!checkbox.checked));
       });
       row.append(checkbox);
+      row.addEventListener("click", (event) => {
+        if (event.target.closest("a, button, input, select, textarea")) return;
+        checkbox.click();
+      });
     }
 
     row.append(label);

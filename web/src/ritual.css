@@ -58,9 +58,7 @@ h1 {
 }
 
 .trainer-link:hover,
-.trainer-link:focus-visible,
-.ritual-label a:hover,
-.ritual-label a:focus-visible {
+.trainer-link:focus-visible {
   color: var(--text);
   text-decoration: underline;
 }
@@ -100,6 +98,10 @@ h1 {
   border: 1px solid rgb(255 255 255 / 0.055);
   border-radius: 11px;
   background: var(--panel-soft);
+}
+
+.ritual-row.checkable {
+  cursor: pointer;
 }
 
 .ritual-item.completed > .ritual-row {
@@ -174,9 +176,11 @@ h1 {
   cursor: pointer;
 }
 
-.ritual-label a {
-  color: var(--accent);
-  font-weight: 750;
+.ritual-label a,
+.ritual-label a:hover,
+.ritual-label a:focus-visible {
+  color: inherit;
+  font-weight: inherit;
   text-decoration: none;
 }
 
