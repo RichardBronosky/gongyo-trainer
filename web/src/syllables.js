@@ -156,7 +156,7 @@ function createChapter(chapter, index) {
   timingActions.append(copyTiming, importTiming);
   audioWrap.append(audio, timingStatus, timingActions);
   ritualLink.className = "ritual-back-link";
-  ritualLink.href = `ritual.html#ritual-chapter-${chapterNumber}`;
+  ritualLink.href = `?view=ritual#ritual-chapter-${chapterNumber}`;
   ritualLink.textContent = "Back to ritual";
 
   chapter.heading.forEach((line) => headingLines.append(createLine(line, 5)));
@@ -182,60 +182,12 @@ async function loadSyllables() {
 
   const text = await response.text();
   const chapters = text.split(/^----$/m).map(parseChapter);
-  container.replaceChildren(...chapters.map(createChapter));
+  const sections = chapters.map(createChapter);
+  sections.forEach((section) => {
+    container.querySelector(`[data-chapter-deck="${section.dataset.chapter}"]`).append(section);
+  });
   setupChapterAudio();
-  if (location.hash) requestAnimationFrame(() => document.querySelector(location.hash)?.scrollIntoView());
-}
-
-loadSyllables().catch((error) => {
-  const container = document.querySelector("[data-chapters]");
-  container.textContent = error.message;
-});
-
-function isIos() {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
-}
-
-function isStandalone() {
-  return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-}
-
-function setupInstallPrompt() {
-  const button = document.querySelector("[data-install-button]");
-  const message = document.querySelector("[data-install-message]");
-  let promptEvent = null;
-
-  if (!button || !message) return;
-
-  if (isStandalone()) {
-    message.textContent = "Installed. This page is available offline after its first successful load.";
-    return;
-  }
-
-  if (isIos()) {
-    message.textContent = "To install on iPhone: Share -> Add to Home Screen. Offline works after this page finishes loading once.";
-  }
-
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    promptEvent = event;
-    button.hidden = false;
-    message.textContent = "Install this page for quick access and offline reading.";
-  });
-
-  button.addEventListener("click", async () => {
-    if (!promptEvent) return;
-    button.hidden = true;
-    promptEvent.prompt();
-    await promptEvent.userChoice;
-    promptEvent = null;
-    message.textContent = "Offline reading is ready after the app finishes caching this page.";
-  });
-
-  window.addEventListener("appinstalled", () => {
-    button.hidden = true;
-    message.textContent = "Installed. Offline reading is enabled.";
-  });
+  return new Map(sections.map((section) => [section.dataset.chapter, section]));
 }
 
 let rowTapHistory = [];
@@ -880,9 +832,10 @@ function constrainBpm(candidate, current = null) {
   return constrained;
 }
 
-function startFsd(startRowIndex, bpm, statusLabel = "FSD engaged", startCellIndex = 0, repeatPass = 0) {
-  const rows = [...document.querySelectorAll(".syllable-line")];
-  const playbackRows = buildPlaybackRows(rows[startRowIndex], repeatPass);
+function startFsd(startRow, bpm, statusLabel = "FSD engaged", startCellIndex = 0, repeatPass = 0) {
+  const chapter = startRow.closest(".chapter");
+  const rows = [...chapter.querySelectorAll(".syllable-line")];
+  const playbackRows = buildPlaybackRows(startRow, repeatPass);
   const intervalMs = 60000 / bpm;
   let playbackIndex = 0;
   let cellIndex = startCellIndex;
@@ -903,12 +856,12 @@ function startFsd(startRowIndex, bpm, statusLabel = "FSD engaged", startCellInde
     rows,
     playbackRows,
     rowStarts,
-    startRowIndex,
+    startRow,
     currentPlaybackIndex: 0,
     currentCellIndex: startCellIndex,
     bpm,
     intervalMs,
-    chapter: playbackRows[0]?.chapter,
+    chapter,
   };
   persistFsdTiming(fsdState, startCellIndex);
   updateRateBubble(bpm);
@@ -999,9 +952,8 @@ function adjustFsdFromTap(row, cell, tapTime) {
     if (!Number.isFinite(candidateBpm) || candidateBpm <= 0) return false;
     const bpm = constrainBpm(candidateBpm, fsdState.bpm);
     const limited = Math.abs(bpm - candidateBpm) > 0.001 ? ", limited" : "";
-    const currentRowIndex = fsdState.rows.indexOf(currentPlaybackRow.row);
     startFsd(
-      currentRowIndex,
+      currentPlaybackRow.row,
       bpm,
       `FSD edge correction (${(timeSinceTransition / 1000).toFixed(3)}s late${limited})`,
       0,
@@ -1036,7 +988,7 @@ function adjustFsdFromTap(row, cell, tapTime) {
     const phaseLabel = phaseDeltaMs < 0 ? "early" : "late";
     const limited = Math.abs(bpm - candidateBpm) > 0.001 ? ", limited" : "";
     const adjustment = `${Math.abs(phaseDeltaMs / 1000).toFixed(3)}s ${phaseLabel}, split${limited}`;
-    startFsd(rowIndex, bpm, `FSD word adjust (${adjustment})`, cellIndex, currentPlaybackRow.repeatPass || 0);
+    startFsd(row, bpm, `FSD word adjust (${adjustment})`, cellIndex, currentPlaybackRow.repeatPass || 0);
     return true;
   }
 
@@ -1050,24 +1002,26 @@ function adjustFsdFromTap(row, cell, tapTime) {
   const phaseLabel = phaseDeltaMs < 0 ? "early" : "late";
   const limited = Math.abs(bpm - candidateBpm) > 0.001 ? ", limited" : "";
   const adjustment = `${Math.abs(phaseDeltaMs / 1000).toFixed(3)}s ${phaseLabel}${limited}`;
-  startFsd(rowIndex, bpm, `FSD adjusted (${adjustment})`, 0, nextPlaybackRow.repeatPass || 0);
+  startFsd(nextPlaybackRow.row, bpm, `FSD adjusted (${adjustment})`, 0, nextPlaybackRow.repeatPass || 0);
   return true;
 }
 
 function recordRowTap(row) {
-  const rows = [...document.querySelectorAll(".syllable-line")];
+  const chapter = row.closest(".chapter");
+  const rows = [...chapter.querySelectorAll(".syllable-line")];
   const rowIndex = rows.indexOf(row);
   const chantRows = rows.filter((candidate) => rowColumnCount(candidate) > 0);
   const sequenceIndex = chantRows.indexOf(row);
   const previous = rowTapHistory.at(-1);
   const tap = {
+    chapter,
     rowIndex,
     sequenceIndex,
     time: performance.now(),
     columns: rowColumnCount(row),
   };
 
-  rowTapHistory = previous && sequenceIndex === previous.sequenceIndex + 1
+  rowTapHistory = previous && previous.chapter === chapter && sequenceIndex === previous.sequenceIndex + 1
     ? [...rowTapHistory, tap].slice(-5)
     : [tap];
 
@@ -1079,7 +1033,7 @@ function recordRowTap(row) {
   const bpm = constrainBpm(calculateInitialSyllableBpm(rowTapHistory));
 
   rowTapHistory = [];
-  if (Number.isFinite(bpm) && bpm > 0) startFsd(rowIndex, bpm);
+  if (Number.isFinite(bpm) && bpm > 0) startFsd(row, bpm);
 }
 
 function setupCellTaps() {
@@ -1119,41 +1073,44 @@ function setupCellTaps() {
   });
 }
 
-function registerServiceWorker() {
-  const message = document.querySelector("[data-install-message]");
-  if (!("serviceWorker" in navigator)) return;
-
-  let reloading = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloading) return;
-    reloading = true;
-    window.setTimeout(() => location.reload(), 1000);
-  });
-
-  navigator.serviceWorker.register("sw.js").then((registration) => {
-    registration.update().catch(() => {});
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") registration.update().catch(() => {});
-    });
-    if (isIos() || isStandalone()) return;
-    message.textContent = registration.active
-      ? "Offline cache is active. Install is available from your browser menu if no button appears."
-      : "Preparing offline cache. Install is available from your browser menu if no button appears.";
-  }).catch(() => {
-    if (message) message.textContent = "Install may still work, but offline caching is not available in this browser.";
-  });
+export function pauseChapter(chapterNumber) {
+  const chapter = document.querySelector(`.chapter[data-chapter="${chapterNumber}"]`);
+  if (!chapter) return;
+  const audio = chapter.querySelector("[data-chapter-audio]");
+  if (audio && !audio.paused) audio.pause();
+  if (audioFsdState?.chapter === chapter) stopAudioFsd();
+  if (fsdState?.chapter === chapter) stopFsd();
+  rowTapHistory = [];
 }
 
-document.querySelector("[data-rate-bubble]")?.addEventListener("click", () => {
-  if (audioFsdState) {
-    audioFsdState.audio.pause();
-    stopAudioFsd();
-  } else {
-    stopFsd();
-  }
-  rowTapHistory = [];
-});
+export function activeChapterNumber() {
+  const chapter = audioFsdState?.chapter || fsdState?.chapter
+    || [...document.querySelectorAll(".chapter")]
+      .find((candidate) => !candidate.querySelector("[data-chapter-audio]")?.paused);
+  return chapter?.dataset.chapter || null;
+}
 
-setupInstallPrompt();
-setupCellTaps();
-registerServiceWorker();
+let trainerInitialized = false;
+let chapterRegistry = new Map();
+
+export async function initTrainer() {
+  if (trainerInitialized) return chapterRegistry;
+  trainerInitialized = true;
+  setupCellTaps();
+  document.querySelector("[data-rate-bubble]")?.addEventListener("click", () => {
+    if (audioFsdState) {
+      audioFsdState.audio.pause();
+      stopAudioFsd();
+    } else {
+      stopFsd();
+    }
+    rowTapHistory = [];
+  });
+  try {
+    chapterRegistry = await loadSyllables();
+    return chapterRegistry;
+  } catch (error) {
+    document.querySelector("[data-chapters]").textContent = error.message;
+    throw error;
+  }
+}

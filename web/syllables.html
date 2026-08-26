@@ -3,36 +3,12 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#080a0f">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="Gongyo">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Gongyo Trainer</title>
-    <link rel="manifest" href="manifest.webmanifest">
-    <link rel="icon" href="assets/icons/gongyo-icon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="assets/icons/gongyo-icon-192.png">
-    <link rel="stylesheet" href="src/syllables.css">
   </head>
   <body>
-    <header class="page-header">
-      <div class="title-line">
-        <h1>Gongyo Trainer</h1>
-        <span class="build-version">v24</span>
-      </div>
-      <div class="install-panel" data-install-panel>
-        <button type="button" data-install-button hidden>Install App</button>
-        <p data-install-message>Open once while online to make this page available offline.</p>
-      </div>
-      <a class="trainer-link" href="ritual.html">Open Ritual</a>
-      <p class="fsd-status" data-fsd-status hidden></p>
-    </header>
-
-    <main class="chapters" data-chapters aria-live="polite">
-      <p class="loading">Loading syllables...</p>
-    </main>
-
-    <button class="rate-bubble" type="button" data-rate-bubble hidden aria-label="Disengage self-driving mode"></button>
-
-    <script src="src/syllables.js"></script>
+    <p><a href="index.html?view=trainer">Open Gongyo Trainer</a></p>
+    <script>
+      location.replace(`index.html?view=trainer${location.hash}`);
+    </script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-function parseRitual(text) {
+export function parseRitual(text) {
   const root = { children: [] };
   const stack = [{ indent: -1, node: root }];
   const notes = [];
@@ -24,9 +24,9 @@ function parseRitual(text) {
   return { nodes: root.children, notes };
 }
 
-function chapterLink(text) {
+function chapterNumber(text) {
   const match = text.match(/^Recite Chapter (2|16)\b/i);
-  return match ? `syllables.html#chapter-${match[1]}` : null;
+  return match?.[1] || null;
 }
 
 function renderNote(text) {
@@ -53,6 +53,9 @@ let timerInterval = null;
 let timerActiveSince = null;
 let timerItem = null;
 let timerWakeLock = null;
+let chapterCollapseHandler = () => {};
+const chapterSlots = new Map();
+const chapterItems = new Map();
 
 function storedTimerMinutes() {
   try {
@@ -162,6 +165,8 @@ function setItemCompleted(item, completed) {
     toggle.textContent = completed ? "+" : "−";
     toggle.setAttribute("aria-expanded", String(!completed));
   }
+  const chapter = item.dataset.ritualChapter;
+  if (chapter && completed) chapterCollapseHandler(chapter);
 }
 
 function updateRitualTimer() {
@@ -215,6 +220,17 @@ function openRitualTimer(item) {
   updateRitualTimer();
 }
 
+function collapseChapterItem(item) {
+  if (!item || item.classList.contains("collapsed")) return;
+  item.classList.add("collapsed");
+  const toggle = item.querySelector(":scope > .ritual-row .ritual-toggle");
+  if (toggle) {
+    toggle.textContent = "+";
+    toggle.setAttribute("aria-expanded", "false");
+  }
+  chapterCollapseHandler(item.dataset.ritualChapter);
+}
+
 function renderNodes(nodes, parentPath = []) {
   const list = document.createElement("ul");
   list.className = "ritual-list";
@@ -226,7 +242,7 @@ function renderNodes(nodes, parentPath = []) {
     const row = document.createElement("div");
     const label = document.createElement("span");
     const hasChildren = node.children.length > 0;
-    const link = chapterLink(node.text);
+    const chapter = chapterNumber(node.text);
     const timerMatch = node.text.match(/^(.*?)\s*\|__\|\s*(minutes.*)$/i);
 
     item.className = "ritual-item";
@@ -259,12 +275,12 @@ function renderNodes(nodes, parentPath = []) {
       });
       suffix.textContent = "min";
       label.append(prefix, input, suffix);
-    } else if (link) {
+    } else if (chapter) {
       const anchor = document.createElement("a");
-      const chapter = node.text.match(/Chapter (2|16)/i)[1];
-      anchor.href = link;
+      anchor.href = `?view=trainer#chapter-${chapter}`;
       anchor.textContent = node.text;
       item.id = `ritual-chapter-${chapter}`;
+      item.dataset.ritualChapter = chapter;
       label.append(anchor);
     } else {
       label.textContent = node.text;
@@ -280,6 +296,12 @@ function renderNodes(nodes, parentPath = []) {
         const collapsed = item.classList.toggle("collapsed");
         toggle.textContent = collapsed ? "+" : "−";
         toggle.setAttribute("aria-expanded", String(!collapsed));
+        if (chapter) {
+          if (collapsed) chapterCollapseHandler(chapter);
+          else chapterItems.forEach((other, number) => {
+            if (number !== chapter) collapseChapterItem(other);
+          });
+        }
       });
       row.append(toggle);
     } else {
@@ -311,6 +333,20 @@ function renderNodes(nodes, parentPath = []) {
     row.append(label);
     item.append(row);
     if (node.marker === "*") setItemCompleted(item, Boolean(ritualState.checks[ritualId]));
+    if (chapter) {
+      const slot = document.createElement("div");
+      slot.className = "ritual-chapter-slot";
+      slot.dataset.chapterSlot = chapter;
+      item.append(slot);
+      chapterSlots.set(chapter, slot);
+      chapterItems.set(chapter, item);
+      item.classList.add("collapsed");
+      const toggle = row.querySelector(".ritual-toggle");
+      if (toggle) {
+        toggle.textContent = "+";
+        toggle.setAttribute("aria-expanded", "false");
+      }
+    }
     if (hasChildren) item.append(renderNodes(node.children, path));
     list.append(item);
   });
@@ -333,6 +369,7 @@ function applyRitualData(data) {
       setItemCompleted(item, Boolean(ritualState.checks[item.dataset.ritualId]));
     }
   });
+  chapterItems.forEach(collapseChapterItem);
   const timerInput = document.querySelector(".timer-minutes");
   if (timerInput) timerInput.value = String(ritualState.timer.minutes);
 }
@@ -378,57 +415,41 @@ async function loadRitual() {
   document.querySelector("[data-ritual-tree]").replaceChildren(renderNodes(nodes));
   document.querySelector("[data-ritual-notes]").replaceChildren(...notes.map(renderNote));
   updateResetLabel();
-  if (location.hash) requestAnimationFrame(() => document.querySelector(location.hash)?.scrollIntoView());
+  return { chapterSlots, chapterItems };
 }
 
-loadRitual().catch((error) => {
-  document.querySelector("[data-ritual-tree]").textContent = error.message;
-});
+let ritualInitialized = false;
 
-function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) return;
+export async function initRitual({ onChapterCollapse = () => {} } = {}) {
+  chapterCollapseHandler = onChapterCollapse;
+  if (ritualInitialized) return { chapterSlots, chapterItems };
+  ritualInitialized = true;
 
-  let reloading = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloading) return;
-    reloading = true;
-    window.setTimeout(() => location.reload(), 1000);
-  });
-
-  navigator.serviceWorker.register("sw.js").then((registration) => {
-    registration.update().catch(() => {});
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") registration.update().catch(() => {});
-    });
-  }).catch((error) => {
-    console.error("Service worker registration failed", error);
-  });
-}
-
-registerServiceWorker();
-
-document.querySelector("[data-ritual-reset]").addEventListener("click", resetRitual);
-
-document.querySelector("[data-timer-back]").addEventListener("click", closeRitualTimer);
-
-document.querySelector("[data-timer-minus]").addEventListener("click", () => adjustRitualTimer(-1));
-
-document.querySelector("[data-timer-plus]").addEventListener("click", () => adjustRitualTimer(1));
-
-document.querySelector("[data-timer-chill]").addEventListener("click", () => {
-  invalidateSnapshot();
-  ritualState.timer.alarm = "chilled";
-  updateRitualTimer();
-});
-
-document.addEventListener("visibilitychange", () => {
-  const overlay = document.querySelector("[data-timer-overlay]");
-  if (document.visibilityState !== "visible") {
-    pauseRitualTimer();
-  } else if (!overlay.hidden && timerActiveSince === null) {
-    timerActiveSince = Date.now();
-    timerInterval = window.setInterval(updateRitualTimer, 250);
+  document.querySelector("[data-ritual-reset]").addEventListener("click", resetRitual);
+  document.querySelector("[data-timer-back]").addEventListener("click", closeRitualTimer);
+  document.querySelector("[data-timer-minus]").addEventListener("click", () => adjustRitualTimer(-1));
+  document.querySelector("[data-timer-plus]").addEventListener("click", () => adjustRitualTimer(1));
+  document.querySelector("[data-timer-chill]").addEventListener("click", () => {
+    invalidateSnapshot();
+    ritualState.timer.alarm = "chilled";
     updateRitualTimer();
-    acquireTimerWakeLock();
+  });
+  document.addEventListener("visibilitychange", () => {
+    const overlay = document.querySelector("[data-timer-overlay]");
+    if (document.visibilityState !== "visible") {
+      pauseRitualTimer();
+    } else if (!overlay.hidden && timerActiveSince === null) {
+      timerActiveSince = Date.now();
+      timerInterval = window.setInterval(updateRitualTimer, 250);
+      updateRitualTimer();
+      acquireTimerWakeLock();
+    }
+  });
+
+  try {
+    return await loadRitual();
+  } catch (error) {
+    document.querySelector("[data-ritual-tree]").textContent = error.message;
+    throw error;
   }
-});
+}

@@ -2,11 +2,12 @@
 
 A static, installable Gongyo ritual checklist and paced reading trainer. The app is designed for GitHub Pages and works offline after its first successful load.
 
-## Pages
+## Application
 
-- `web/ritual.html` renders the nested ritual checklist from `web/assets/ritual.txt`.
-- `web/syllables.html` renders Chapters 2 and 16 from `web/assets/syllables.5-wide.txt` with seekable chapter audio and local, portable audio-synchronized timing data.
-- `web/index.html` redirects to the ritual page.
+- `web/index.html` is the canonical single-page app with Ritual and Trainer views selected by `?view=ritual|trainer`.
+- Ritual renders the nested checklist from `web/assets/ritual.txt`. Each recitation can expand its canonical chapter inline before Sound Bell.
+- Trainer presents the same two movable chapter sections together, with seekable audio and local, portable audio-synchronized timing data.
+- `web/ritual.html` and `web/syllables.html` are lightweight legacy redirects that preserve deep-link hashes.
 
 ## Local Development
 
@@ -92,7 +93,7 @@ The ritual and chapter content are plain text files. JavaScript parses them at r
 
 ## Versioning
 
-Every deployed app change must update all visible `vN` labels and `CACHE_NAME` in `web/sw.js` to the same next integer. This forces installed/offline clients to receive the new app shell.
+Every deployed app change must update the visible `vN` label in `web/index.html` and `CACHE_NAME` in `web/sw.js` to the same next integer. This forces installed/offline clients to receive the new app shell.
 
 ## Scope
 

@@ -36,7 +36,7 @@ External Google Drive chapter links are intentional references and are not appli
 
 ### Ritual View
 
-`web/ritual.html` loads and parses `web/assets/ritual.txt`.
+The canonical SPA at `web/index.html?view=ritual` loads and parses `web/assets/ritual.txt`.
 
 Behavior:
 
@@ -47,10 +47,11 @@ Behavior:
 - Completing a parent collapses its descendants.
 - Completion state persists locally until the practitioner uses the Ritual reset control.
 - Reset clears completion and Daimoku timer state immediately; until any restored value is changed, tapping it again swaps between the reset and previous state.
-- Recitation actions link to the corresponding trainer chapter.
+- Each recitation parent expands its canonical chapter section directly after the recitation row and before Sound Bell.
+- Ritual chapters default collapsed, only one can be manually expanded, and manual collapse state is not persisted.
+- Collapsing or completing a recitation pauses its chapter audio and disengages FSD without resetting its playhead.
 - Non-list lines render as notes below the checklist.
 - Kanji runs render at three times the surrounding text size.
-- A second Trainer link appears after the checklist.
 
 The Daimoku line contains a timer placeholder:
 
@@ -73,7 +74,7 @@ Ritual completion, timer, and temporary reset/restore state are stored locally. 
 
 ### Trainer View
 
-`web/syllables.html` loads and parses `web/assets/syllables.5-wide.txt`.
+`web/index.html?view=trainer` loads and parses `web/assets/syllables.5-wide.txt`.
 
 Behavior:
 
@@ -88,7 +89,9 @@ Behavior:
 - Checkbox marker cells are controls only and never receive FSD beats.
 - Confirmed two-spoken-syllable cells receive a dark red underline.
 
-Chapter labels link to the externally hosted reference files. Each chapter ends with a link back to its exact Ritual checklist item.
+Chapter labels link to the externally hosted reference files. Each chapter ends with a link back to its exact Ritual checklist item; this link is hidden while that chapter is embedded in Ritual.
+
+Each chapter is rendered and bound once. The canonical chapter section is moved with DOM `append()` between its Trainer deck slot and matching Ritual recitation slot. View changes do not intentionally pause audio or FSD, so playback continues where browser reparenting permits.
 
 Each chapter also has native audio controls backed by its approved relative M4A asset. Playback supports pause, resume, and timeline seeking; only one chapter plays at a time. Pausing removes the active FSD highlight without resetting the audio playhead, and resumed or seeked playback follows `audio.currentTime` using saved timing.
 
@@ -173,12 +176,14 @@ The implementation should remain data-oriented enough to support additional repe
 The application intentionally uses browser-native HTML, CSS, and JavaScript.
 
 - `web/`: Complete GitHub Pages artifact; no documentation or tooling belongs here.
-- `web/index.html`: GitHub Pages landing redirect.
-- `web/ritual.html`: Ritual page shell.
-- `web/syllables.html`: Trainer page shell.
-- `web/src/ritual.js`: Ritual parser, renderer, timer, checklist behavior.
+- `web/index.html`: Canonical SPA shell with shared header, view selector, both view hosts, timer, and global FSD UI.
+- `web/ritual.html`: Legacy Ritual redirect alias that preserves hashes.
+- `web/syllables.html`: Legacy Trainer redirect alias that preserves hashes.
+- `web/src/app.js`: Initialization, view placement, History API routing, installation, and service-worker lifecycle.
+- `web/src/app.css`: Shared shell, header, and view-selector presentation.
+- `web/src/ritual.js`: ES module for Ritual parsing, rendering, timer, checklist behavior, and chapter slots.
 - `web/src/ritual.css`: Ritual layout and timer presentation.
-- `web/src/syllables.js`: Chapter parser, renderer, FSD timing engine.
+- `web/src/syllables.js`: ES module for canonical chapter rendering, audio, and chapter-local FSD timing.
 - `web/src/syllables.css`: Trainer grid, highlights, responsive presentation.
 - `web/manifest.webmanifest`: Install metadata.
 - `web/sw.js`: Offline app-shell cache.
@@ -193,16 +198,15 @@ Development conveniences must remain subordinate to the practitioner-facing appl
 
 ## 7. Offline and Versioning Contract
 
-The service worker installs the versioned critical app shell atomically. Approved M4A files are runtime assets rather than install-blocking app-shell entries. Same-origin byte-range requests bypass the Cache API so audio seeking can receive partial responses; navigations are network-first with exact-page and Ritual offline fallbacks, while other same-origin resources use the current cache with exact-key cache-first runtime filling.
+The service worker installs the versioned critical app shell atomically. Approved M4A files are runtime assets rather than install-blocking app-shell entries. Same-origin byte-range requests bypass the Cache API so audio seeking can receive partial responses; navigations are network-first with exact-page and canonical `index.html` offline fallbacks, including query-bearing SPA URLs, while other same-origin resources use the current cache with exact-key cache-first runtime filling.
 
 For every deployable change:
 
 1. Increment `CACHE_NAME` in `web/sw.js`.
-2. Update the visible `vN` in `web/ritual.html`.
-3. Update the visible `vN` in `web/syllables.html`.
-4. Add any new install-critical runtime file to `APP_SHELL`. Large seekable M4A files may be intentionally excluded so service-worker activation is not blocked by audio downloads.
-5. Confirm every `APP_SHELL` path exists.
-6. Load once online, then verify both pages and their install-critical content while offline. M4A files excluded from `APP_SHELL` are not part of this activation-time offline guarantee.
+2. Update the visible `vN` in `web/index.html`.
+3. Add any new install-critical runtime file to `APP_SHELL`. Large seekable M4A files may be intentionally excluded so service-worker activation is not blocked by audio downloads.
+4. Confirm every `APP_SHELL` path exists.
+5. Load once online, then verify both SPA views and their install-critical content while offline. M4A files excluded from `APP_SHELL` are not part of this activation-time offline guarantee.
 
 Do not add random cache-busting query strings. Stable URLs are required for deterministic offline matching.
 
@@ -219,11 +223,11 @@ Required repository configuration:
 
 Deployment acceptance:
 
-- Root project URL redirects to Ritual.
-- Ritual and Trainer navigation works under `/gongyo-trainer/`.
+- Root project URL opens the SPA in Ritual view.
+- Ritual and Trainer History API navigation works under `/gongyo-trainer/`.
 - Manifest and icons load without 404s.
 - Service worker scope is the project directory.
-- Installed app opens Ritual.
+- Installed app opens Ritual by default.
 
 ## 9. Validation Checklist
 
@@ -240,7 +244,8 @@ Deployment acceptance:
 - Every `*` item has a completion control.
 - Nested children expand and collapse.
 - Completing a parent collapses children.
-- Chapter links navigate to the correct trainer anchor.
+- Recitation links navigate to the correct Trainer anchor; parent toggles embed the chapter before Sound Bell.
+- Only one Ritual chapter is expanded, and collapse/completion pauses audio and disengages FSD while preserving the playhead.
 - Timer minutes survive refresh and cache upgrades.
 - Ritual completion and timer progress survive refresh and cache upgrades until reset.
 - The timer advances only while its overlay and browser tab are visible.
@@ -256,7 +261,8 @@ Deployment acceptance:
 - The repeated section runs exactly three times.
 - FSD stops at chapter boundaries.
 - Active cell remains visually distinct from active row.
-- Backlinks return to exact Ritual items.
+- Backlinks switch views and return to exact Ritual items.
+- Switching views reparents, rather than recreates, chapters and does not intentionally interrupt active playback/FSD.
 - Both Click track switches remain synchronized.
 - Clicks follow live FSD and saved audio timing through pause, seek, rate, and repeated-section transitions.
 
@@ -282,7 +288,7 @@ An AI agent starting from scratch should:
 
 1. Read `README.md`, `AGENTS.md`, and this plan.
 2. Inspect the two content assets before changing parser assumptions.
-3. Identify whether a requested change is content, presentation, timing, PWA, or deployment behavior.
+3. Identify whether a requested change is content, presentation, timing, SPA routing, PWA, or deployment behavior.
 4. Make the smallest change that preserves static hosting and relative paths.
 5. Increment the shared app/cache version for deployable changes.
 6. Run static validation.

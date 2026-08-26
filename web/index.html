@@ -3,12 +3,68 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="0; url=ritual.html">
+    <meta name="theme-color" content="#080a0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Gongyo">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Gongyo Trainer</title>
-    <link rel="canonical" href="ritual.html">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="assets/icons/gongyo-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/icons/gongyo-icon-192.png">
+    <link rel="stylesheet" href="src/app.css">
+    <link rel="stylesheet" href="src/ritual.css">
+    <link rel="stylesheet" href="src/syllables.css">
   </head>
   <body>
-    <p><a href="ritual.html">Open Gongyo Trainer</a></p>
-    <script>location.replace("ritual.html");</script>
+    <header class="app-header">
+      <div class="title-line">
+        <h1>Gongyo Trainer</h1>
+        <span class="build-version">v25</span>
+      </div>
+      <nav class="view-selector" aria-label="App view">
+        <a href="?view=ritual" data-view-link="ritual">Ritual</a>
+        <a href="?view=trainer" data-view-link="trainer">Trainer</a>
+      </nav>
+      <div class="install-panel" data-install-panel>
+        <button type="button" data-install-button hidden>Install App</button>
+        <p data-install-message>Open once while online to make this app available offline.</p>
+      </div>
+      <p class="fsd-status" data-fsd-status hidden></p>
+    </header>
+
+    <main>
+      <section class="view-host ritual-view" data-view-host="ritual" aria-label="Ritual">
+        <div class="ritual-toolbar">
+          <h2>Ritual</h2>
+          <button class="reset-button" type="button" data-ritual-reset>Reset</button>
+        </div>
+        <div class="ritual-card">
+          <div data-ritual-tree>Loading ritual...</div>
+          <div class="ritual-notes" data-ritual-notes></div>
+        </div>
+      </section>
+
+      <section class="view-host trainer-view" data-view-host="trainer" aria-label="Trainer" hidden>
+        <div class="chapters" data-chapters>
+          <p class="loading">Loading syllables...</p>
+        </div>
+      </section>
+    </main>
+
+    <div class="timer-overlay" data-timer-overlay role="dialog" aria-modal="true" aria-labelledby="timer-title" hidden>
+      <p class="timer-title" id="timer-title">Daimoku</p>
+      <output class="timer-clock" data-timer-clock aria-label="Current time"></output>
+      <output class="timer-display" data-timer-display>00:00</output>
+      <p class="timer-hint" data-timer-hint>Timer running</p>
+      <div class="timer-controls" data-timer-controls>
+        <button type="button" data-timer-minus aria-label="Subtract one minute">−1 min</button>
+        <button type="button" data-timer-back>Back</button>
+        <button type="button" data-timer-plus aria-label="Add one minute">+1 min</button>
+      </div>
+      <button class="timer-chill" type="button" data-timer-chill hidden>Chill</button>
+    </div>
+
+    <button class="rate-bubble" type="button" data-rate-bubble hidden aria-label="Disengage self-driving mode"></button>
+    <script type="module" src="src/app.js"></script>
   </body>
 </html>

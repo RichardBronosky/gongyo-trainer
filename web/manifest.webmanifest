@@ -2,7 +2,7 @@
   "name": "Gongyo Trainer",
   "short_name": "Gongyo",
   "description": "Gongyo reading trainer.",
-  "start_url": "./ritual.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#080a0f",

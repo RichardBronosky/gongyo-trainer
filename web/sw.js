@@ -1,6 +1,8 @@
-const CACHE_NAME = "gongyo-trainer-v24";
+const CACHE_NAME = "gongyo-trainer-v25";
 const APP_SHELL = [
   "./index.html",
+  "./src/app.css",
+  "./src/app.js",
   "./syllables.html",
   "./src/syllables.css",
   "./src/syllables.js",
@@ -30,9 +32,7 @@ self.addEventListener("activate", (event) => {
       .then((names) => Promise.all(names
         .filter((name) => (name.startsWith("gongyo-syllables-") || name.startsWith("gongyo-trainer-")) && name !== CACHE_NAME)
         .map((name) => caches.delete(name))))
-      .then(() => self.clients.claim())
-      .then(() => self.clients.matchAll({ type: "window" }))
-      .then((clients) => Promise.allSettled(clients.map((client) => client.navigate(client.url)))),
+      .then(() => self.clients.claim()),
   );
 });
 
@@ -60,8 +60,8 @@ self.addEventListener("fetch", (event) => {
       } catch (error) {
         const exactPage = await cache.match(request);
         if (exactPage) return exactPage;
-        const ritualPage = await cache.match(new URL("./ritual.html", self.registration.scope).href);
-        if (ritualPage) return ritualPage;
+        const canonicalPage = await cache.match(new URL("./index.html", self.registration.scope).href);
+        if (canonicalPage) return canonicalPage;
         throw error;
       }
     })());
