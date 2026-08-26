@@ -56,6 +56,7 @@ let timerWakeLock = null;
 let chapterCollapseHandler = () => {};
 const chapterSlots = new Map();
 const chapterItems = new Map();
+let scrollableItemObserver = null;
 
 function storedTimerMinutes() {
   try {
@@ -154,19 +155,76 @@ function closeRitualTimer() {
   saveRitualState();
 }
 
+function itemToggleButtons(item) {
+  return [
+    item.querySelector(":scope > .ritual-row .ritual-toggle"),
+    item.querySelector(":scope > .ritual-bottom-control .ritual-bottom-toggle"),
+  ].filter(Boolean);
+}
+
+function updateItemToggles(item) {
+  const collapsed = item.classList.contains("collapsed");
+  const completed = item.classList.contains("completed");
+  itemToggleButtons(item).forEach((toggle) => {
+    toggle.disabled = completed;
+    toggle.textContent = collapsed ? "+" : "−";
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+  });
+}
+
+function nextRitualRow(item) {
+  let current = item;
+  while (current) {
+    if (current.nextElementSibling) {
+      return current.nextElementSibling.querySelector(":scope > .ritual-row");
+    }
+    current = current.parentElement?.closest(".ritual-item");
+  }
+  return null;
+}
+
+function updateScrollableControl(item) {
+  if (item.classList.contains("collapsed")) return;
+  const control = item.querySelector(":scope > .ritual-bottom-control");
+  if (!control) return;
+  const scrollable = item.getBoundingClientRect().height > window.innerHeight;
+  control.hidden = !scrollable;
+  item.classList.toggle("scrollable-item", scrollable);
+}
+
+function queueScrollableControlUpdate(item) {
+  requestAnimationFrame(() => updateScrollableControl(item));
+}
+
+function setItemCollapsed(item, collapsed, proceed = false) {
+  if (!item || item.classList.contains("collapsed") === collapsed) return;
+  const nextRow = proceed ? nextRitualRow(item) : null;
+  item.classList.toggle("collapsed", collapsed);
+  updateItemToggles(item);
+
+  const chapter = item.dataset.ritualChapter;
+  if (chapter) {
+    if (collapsed) chapterCollapseHandler(chapter);
+    else chapterItems.forEach((other, number) => {
+      if (number !== chapter) setItemCollapsed(other, true);
+    });
+  }
+
+  if (!collapsed) queueScrollableControlUpdate(item);
+  if (collapsed && proceed && nextRow) {
+    requestAnimationFrame(() => {
+      nextRow.scrollIntoView({ behavior: "smooth", block: "center" });
+      nextRow.querySelector("input, button, a")?.focus({ preventScroll: true });
+    });
+  }
+}
+
 function setItemCompleted(item, completed) {
   const checkbox = item.querySelector(":scope > .ritual-row .ritual-check");
-  const toggle = item.querySelector(":scope > .ritual-row .ritual-toggle");
   if (checkbox) checkbox.checked = completed;
   item.classList.toggle("completed", completed);
-  item.classList.toggle("collapsed", completed);
-  if (toggle) {
-    toggle.disabled = completed;
-    toggle.textContent = completed ? "+" : "−";
-    toggle.setAttribute("aria-expanded", String(!completed));
-  }
-  const chapter = item.dataset.ritualChapter;
-  if (chapter && completed) chapterCollapseHandler(chapter);
+  setItemCollapsed(item, completed);
+  updateItemToggles(item);
 }
 
 function updateRitualTimer() {
@@ -221,14 +279,7 @@ function openRitualTimer(item) {
 }
 
 function collapseChapterItem(item) {
-  if (!item || item.classList.contains("collapsed")) return;
-  item.classList.add("collapsed");
-  const toggle = item.querySelector(":scope > .ritual-row .ritual-toggle");
-  if (toggle) {
-    toggle.textContent = "+";
-    toggle.setAttribute("aria-expanded", "false");
-  }
-  chapterCollapseHandler(item.dataset.ritualChapter);
+  setItemCollapsed(item, true);
 }
 
 function renderNodes(nodes, parentPath = []) {
@@ -293,15 +344,7 @@ function renderNodes(nodes, parentPath = []) {
       toggle.textContent = "−";
       toggle.setAttribute("aria-expanded", "true");
       toggle.addEventListener("click", () => {
-        const collapsed = item.classList.toggle("collapsed");
-        toggle.textContent = collapsed ? "+" : "−";
-        toggle.setAttribute("aria-expanded", String(!collapsed));
-        if (chapter) {
-          if (collapsed) chapterCollapseHandler(chapter);
-          else chapterItems.forEach((other, number) => {
-            if (number !== chapter) collapseChapterItem(other);
-          });
-        }
+        setItemCollapsed(item, !item.classList.contains("collapsed"));
       });
       row.append(toggle);
     } else {
@@ -348,6 +391,20 @@ function renderNodes(nodes, parentPath = []) {
       }
     }
     if (hasChildren) item.append(renderNodes(node.children, path));
+    if (hasChildren) {
+      const bottomControl = document.createElement("div");
+      const bottomToggle = document.createElement("button");
+      bottomControl.className = "ritual-bottom-control";
+      bottomControl.hidden = true;
+      bottomToggle.type = "button";
+      bottomToggle.className = "ritual-bottom-toggle";
+      bottomToggle.textContent = "−";
+      bottomToggle.setAttribute("aria-expanded", "true");
+      bottomToggle.setAttribute("aria-label", `Collapse ${node.text}`);
+      bottomToggle.addEventListener("click", () => setItemCollapsed(item, true, true));
+      bottomControl.append(bottomToggle);
+      item.append(bottomControl);
+    }
     list.append(item);
   });
 
@@ -415,6 +472,17 @@ async function loadRitual() {
   document.querySelector("[data-ritual-tree]").replaceChildren(renderNodes(nodes));
   document.querySelector("[data-ritual-notes]").replaceChildren(...notes.map(renderNote));
   updateResetLabel();
+  const expandableItems = [...document.querySelectorAll(".ritual-bottom-control")]
+    .map((control) => control.parentElement);
+  if ("ResizeObserver" in window) {
+    scrollableItemObserver = new ResizeObserver((entries) => {
+      entries.forEach((entry) => updateScrollableControl(entry.target));
+    });
+    expandableItems.forEach((item) => scrollableItemObserver.observe(item));
+  }
+  window.addEventListener("resize", () => {
+    expandableItems.forEach(queueScrollableControlUpdate);
+  });
   return { chapterSlots, chapterItems };
 }
 

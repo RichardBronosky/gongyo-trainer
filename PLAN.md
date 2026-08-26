@@ -44,6 +44,7 @@ Behavior:
 - Lines beginning with `*` are completable top-level ritual actions.
 - Lines beginning with `-` are nested explanatory/action items without checkboxes.
 - Parent items have explicit expand/collapse controls.
+- Expanded Ritual items taller than the viewport mirror their collapse control at the bottom so the next step is reachable without reverse scrolling.
 - Completing a parent collapses its descendants.
 - Completion state persists locally until the practitioner uses the Ritual reset control.
 - Reset clears completion and Daimoku timer state immediately; until any restored value is changed, tapping it again swaps between the reset and previous state.

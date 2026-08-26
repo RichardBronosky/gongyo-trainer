@@ -82,7 +82,10 @@ class DevelopmentHandler(SimpleHTTPRequestHandler):
         chunk = file.read(min(1024 * 1024, remaining))
         if not chunk:
           break
-        self.wfile.write(chunk)
+        try:
+          self.wfile.write(chunk)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+          return
         remaining -= len(chunk)
 
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "gongyo-trainer-v25";
+const CACHE_NAME = "gongyo-trainer-v26";
 const APP_SHELL = [
   "./index.html",
   "./src/app.css",

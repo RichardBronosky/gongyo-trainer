@@ -75,7 +75,8 @@
 }
 
 .ritual-item.collapsed > .ritual-list,
-.ritual-item.collapsed > .ritual-chapter-slot {
+.ritual-item.collapsed > .ritual-chapter-slot,
+.ritual-item.collapsed > .ritual-bottom-control {
   display: none;
 }
 
@@ -98,6 +99,30 @@
 
 .ritual-toggle:disabled {
   opacity: 0.35;
+}
+
+.ritual-bottom-control {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 7px;
+}
+
+.ritual-bottom-toggle {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: #0c1119;
+  color: var(--muted);
+  font: 700 1.25rem/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  cursor: pointer;
+}
+
+.ritual-item.scrollable-item > .ritual-row .ritual-toggle {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
 }
 
 .ritual-spacer {
