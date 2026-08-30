@@ -5,7 +5,7 @@ A static, installable Gongyo ritual checklist and paced reading trainer. The app
 ## Application
 
 - `web/index.html` is the canonical single-page app with Ritual and Trainer views selected by `?view=ritual|trainer`.
-- Ritual renders the nested checklist from `web/assets/ritual.txt`. Each recitation can expand its canonical chapter inline before Sound Bell.
+- Ritual renders the nested checklist from `web/assets/ritual.txt`. Each recitation can expand its canonical chapter inline before Sound Bell, and Daimoku expands into a viewport-height timer panel.
 - Trainer presents the same two movable chapter sections together, with seekable audio and local, portable audio-synchronized timing data.
 - `web/ritual.html` and `web/syllables.html` are lightweight legacy redirects that preserve deep-link hashes.
 
@@ -25,8 +25,23 @@ ranges so updated service workers load immediately and audio remains seekable.
 `internal/server.py` is the local-only implementation behind `tools.sh`; it is
 not a user-facing entry point or part of the deployed application.
 
-To expose the server through an ngrok-assigned URL, run this in another
-terminal:
+To start the server and expose it through ngrok with one supervised command:
+
+```bash
+./tools.sh public
+```
+
+This detects the current home public IPv4, restricts forwarded requests to that
+exact address, prints the public URL, and stops both processes on `Ctrl-C` or if
+either process exits. Direct localhost access remains available. Other forwarded
+clients receive only a small `202 Accepted` page. The server remains bound to
+localhost. Ngrok forwards to a separate ephemeral localhost listener that
+requires its forwarded client address, so missing headers fail closed without
+restricting direct local development. The gate is local development tooling
+rather than a deployed API.
+
+The standalone tunnel command remains available when managing the server
+separately:
 
 ```bash
 ./tools.sh tunnel
@@ -39,7 +54,8 @@ Send a development notification with:
 ```
 
 Copy `.env.example` to `.env` to override the HTTP port, ngrok URL, ntfy server,
-or ntfy topic. The ntfy server and topic are separate settings so a future local
+or ntfy topic. `public` always binds its server to `127.0.0.1`, regardless of
+`HTTP_BIND`. The ntfy server and topic are separate settings so a future local
 ntfy server does not require changing the notification command.
 
 ## GitHub Pages

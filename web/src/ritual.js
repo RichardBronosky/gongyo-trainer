@@ -51,8 +51,10 @@ const TIMER_MINUTES_KEY = "gongyo.daimokuMinutes";
 const DEFAULT_TIMER = { minutes: 5, elapsed: 0, alarm: "armed" };
 let timerInterval = null;
 let timerActiveSince = null;
+let timerHiddenAt = null;
 let timerItem = null;
 let timerWakeLock = null;
+let ritualViewVisible = true;
 let chapterCollapseHandler = () => {};
 const chapterSlots = new Map();
 const chapterItems = new Map();
@@ -115,7 +117,7 @@ function formatTimer(milliseconds, round = Math.ceil) {
 async function acquireTimerWakeLock() {
   try {
     const wakeLock = await navigator.wakeLock?.request("screen");
-    if (document.querySelector("[data-timer-overlay]").hidden || document.visibilityState !== "visible") {
+    if (!timerItem || timerItem.classList.contains("collapsed") || document.visibilityState !== "visible") {
       wakeLock?.release().catch(() => {});
     } else {
       timerWakeLock = wakeLock;
@@ -135,6 +137,7 @@ function checkpointTimer() {
   const now = Date.now();
   ritualState.timer.elapsed += now - timerActiveSince;
   timerActiveSince = now;
+  timerHiddenAt = now;
 }
 
 function pauseRitualTimer() {
@@ -143,16 +146,8 @@ function pauseRitualTimer() {
   timerInterval = null;
   timerActiveSince = null;
   releaseTimerWakeLock();
-  saveRitualState();
-}
-
-function closeRitualTimer() {
-  invalidateSnapshot();
-  pauseRitualTimer();
-  const overlay = document.querySelector("[data-timer-overlay]");
-  overlay.hidden = true;
-  timerItem = null;
-  saveRitualState();
+  if (document.querySelector("[data-timer-panel]")) updateRitualTimer();
+  else saveRitualState();
 }
 
 function itemToggleButtons(item) {
@@ -184,9 +179,13 @@ function nextRitualRow(item) {
 }
 
 function updateScrollableControl(item) {
-  if (item.classList.contains("collapsed")) return;
   const control = item.querySelector(":scope > .ritual-bottom-control");
   if (!control) return;
+  if (item.classList.contains("collapsed")) {
+    control.hidden = true;
+    item.classList.remove("scrollable-item");
+    return;
+  }
   const scrollable = item.getBoundingClientRect().height > window.innerHeight;
   control.hidden = !scrollable;
   item.classList.toggle("scrollable-item", scrollable);
@@ -201,6 +200,7 @@ function setItemCollapsed(item, collapsed, proceed = false) {
   const nextRow = proceed ? nextRitualRow(item) : null;
   item.classList.toggle("collapsed", collapsed);
   updateItemToggles(item);
+  updateScrollableControl(item);
 
   const chapter = item.dataset.ritualChapter;
   if (chapter) {
@@ -208,6 +208,10 @@ function setItemCollapsed(item, collapsed, proceed = false) {
     else chapterItems.forEach((other, number) => {
       if (number !== chapter) setItemCollapsed(other, true);
     });
+  }
+  if (item === timerItem) {
+    if (collapsed) pauseRitualTimer();
+    else openRitualTimer();
   }
 
   if (!collapsed) queueScrollableControlUpdate(item);
@@ -223,27 +227,33 @@ function setItemCompleted(item, completed) {
   const checkbox = item.querySelector(":scope > .ritual-row .ritual-check");
   if (checkbox) checkbox.checked = completed;
   item.classList.toggle("completed", completed);
-  setItemCollapsed(item, completed);
+  if (completed && item === timerItem) {
+    ritualState.timer.elapsed = 0;
+    ritualState.timer.alarm = "armed";
+  }
+  if (completed || item !== timerItem) setItemCollapsed(item, completed);
   updateItemToggles(item);
 }
 
 function updateRitualTimer() {
   checkpointTimer();
-  const overlay = document.querySelector("[data-timer-overlay]");
+  const panel = document.querySelector("[data-timer-panel]");
   const duration = ritualState.timer.minutes * 60 * 1000;
   const reached = ritualState.timer.elapsed >= duration;
   if (reached && ritualState.timer.alarm === "armed") {
     ritualState.timer.alarm = "flashing";
-    if (!overlay.hidden) navigator.vibrate?.([300, 200, 300, 200, 600]);
+    if (timerItem && !timerItem.classList.contains("collapsed")) navigator.vibrate?.([300, 200, 300, 200, 600]);
   } else if (!reached && ritualState.timer.alarm !== "armed") {
     ritualState.timer.alarm = "armed";
   }
 
-  overlay.classList.toggle("alarming", ritualState.timer.alarm === "flashing");
+  panel.classList.toggle("alarming", ritualState.timer.alarm === "flashing");
   document.querySelector("[data-timer-display]").value = reached
     ? formatTimer(ritualState.timer.elapsed, Math.floor)
     : formatTimer(duration - ritualState.timer.elapsed);
-  document.querySelector("[data-timer-hint]").textContent = reached
+  document.querySelector("[data-timer-hint]").textContent = timerActiveSince === null
+    ? "Timer paused"
+    : reached
     ? ritualState.timer.alarm === "chilled" ? "Chilled · timer running" : "Duration reached · timer running"
     : "Timer running";
   document.querySelector("[data-timer-chill]").hidden = ritualState.timer.alarm !== "flashing";
@@ -256,6 +266,33 @@ function updateRitualTimer() {
 }
 
 function adjustRitualTimer(minutes) {
+  if (ritualState.timer.alarm !== "armed") {
+    invalidateSnapshot();
+    ritualState.timer.alarm = "armed";
+    ritualState.timer.elapsed = 0;
+    timerActiveSince = Date.now();
+    if (timerInterval === null && ritualViewVisible && document.visibilityState === "visible") {
+      timerInterval = window.setInterval(updateRitualTimer, 250);
+      acquireTimerWakeLock();
+    }
+    const input = timerItem?.querySelector(".timer-minutes");
+    if (input) input.value = String(ritualState.timer.minutes);
+    updateRitualTimer();
+    return;
+  }
+  if (minutes < 0 && timerActiveSince !== null) {
+    const newValue = Math.max(1, ritualState.timer.minutes + minutes);
+    const duration = newValue * 60 * 1000;
+    const remaining = duration - ritualState.timer.elapsed;
+    if (remaining <= 0) {
+      ritualState.timer.minutes = newValue;
+      ritualState.timer.elapsed = duration - 2000;
+      const input = timerItem?.querySelector(".timer-minutes");
+      if (input) input.value = String(newValue);
+      updateRitualTimer();
+      return;
+    }
+  }
   const value = Math.min(180, Math.max(1, ritualState.timer.minutes + minutes));
   if (value === ritualState.timer.minutes) return;
   invalidateSnapshot();
@@ -265,17 +302,26 @@ function adjustRitualTimer(minutes) {
   updateRitualTimer();
 }
 
-function openRitualTimer(item) {
+function focusRitualTimer() {
+  const panel = document.querySelector("[data-timer-panel]");
+  requestAnimationFrame(() => panel.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
+function openRitualTimer() {
   invalidateSnapshot();
-  timerItem = item;
-  const overlay = document.querySelector("[data-timer-overlay]");
-  overlay.hidden = false;
-  if (document.visibilityState === "visible" && timerActiveSince === null) {
+  if (ritualViewVisible && document.visibilityState === "visible" && timerActiveSince === null
+      && timerItem && !timerItem.classList.contains("collapsed")) {
+    if (timerHiddenAt !== null) {
+      const backgroundMs = Date.now() - timerHiddenAt;
+      if (backgroundMs > 0) ritualState.timer.elapsed += backgroundMs;
+      timerHiddenAt = null;
+    }
     timerActiveSince = Date.now();
     timerInterval = window.setInterval(updateRitualTimer, 250);
     acquireTimerWakeLock();
   }
   updateRitualTimer();
+  focusRitualTimer();
 }
 
 function collapseChapterItem(item) {
@@ -320,6 +366,10 @@ function renderNodes(nodes, parentPath = []) {
         const value = Math.min(180, Math.max(1, Math.round(Number(input.value) || 5)));
         input.value = String(value);
         if (value === ritualState.timer.minutes) return;
+        if (timerActiveSince !== null) {
+          input.value = String(ritualState.timer.minutes);
+          return;
+        }
         invalidateSnapshot();
         ritualState.timer.minutes = value;
         updateRitualTimer();
@@ -327,12 +377,9 @@ function renderNodes(nodes, parentPath = []) {
       suffix.textContent = "min";
       label.append(prefix, input, suffix);
     } else if (chapter) {
-      const anchor = document.createElement("a");
-      anchor.href = `?view=trainer#chapter-${chapter}`;
-      anchor.textContent = node.text;
       item.id = `ritual-chapter-${chapter}`;
       item.dataset.ritualChapter = chapter;
-      label.append(anchor);
+      label.textContent = node.text;
     } else {
       label.textContent = node.text;
     }
@@ -368,14 +415,30 @@ function renderNodes(nodes, parentPath = []) {
       row.append(checkbox);
       row.addEventListener("click", (event) => {
         if (event.target.closest("a, button, input, select, textarea")) return;
-        if (timerMatch) openRitualTimer(item);
-        else checkbox.click();
+        if (timerMatch) {
+          if (item.classList.contains("collapsed")) setItemCollapsed(item, false);
+          else focusRitualTimer();
+        } else if (hasChildren && item.classList.contains("collapsed") && !checkbox.checked) {
+          setItemCollapsed(item, false);
+        } else {
+          checkbox.click();
+        }
       });
     }
 
     row.append(label);
     item.append(row);
+    if (timerMatch) {
+      const panel = document.querySelector("[data-timer-panel]");
+      panel.hidden = false;
+      item.append(panel);
+    }
     if (node.marker === "*") setItemCompleted(item, Boolean(ritualState.checks[ritualId]));
+    if (timerMatch) {
+      item.classList.add("collapsed");
+      timerItem = item;
+      updateItemToggles(item);
+    }
     if (chapter) {
       const slot = document.createElement("div");
       slot.className = "ritual-chapter-slot";
@@ -391,7 +454,7 @@ function renderNodes(nodes, parentPath = []) {
       }
     }
     if (hasChildren) item.append(renderNodes(node.children, path));
-    if (hasChildren) {
+    if (hasChildren && !timerMatch) {
       const bottomControl = document.createElement("div");
       const bottomToggle = document.createElement("button");
       bottomControl.className = "ritual-bottom-control";
@@ -429,6 +492,7 @@ function applyRitualData(data) {
   chapterItems.forEach(collapseChapterItem);
   const timerInput = document.querySelector(".timer-minutes");
   if (timerInput) timerInput.value = String(ritualState.timer.minutes);
+  updateRitualTimer();
 }
 
 function updateResetLabel() {
@@ -442,9 +506,9 @@ function resetRitual() {
   if (timerInterval !== null) window.clearInterval(timerInterval);
   timerInterval = null;
   timerActiveSince = null;
+  timerHiddenAt = null;
   releaseTimerWakeLock();
-  document.querySelector("[data-timer-overlay]").hidden = true;
-  timerItem = null;
+  if (timerItem) setItemCollapsed(timerItem, true);
 
   if (!ritualState.snapshot) {
     ritualState.snapshot = ritualData();
@@ -471,6 +535,7 @@ async function loadRitual() {
   const { nodes, notes } = parseRitual(await response.text());
   document.querySelector("[data-ritual-tree]").replaceChildren(renderNodes(nodes));
   document.querySelector("[data-ritual-notes]").replaceChildren(...notes.map(renderNote));
+  updateRitualTimer();
   updateResetLabel();
   const expandableItems = [...document.querySelectorAll(".ritual-bottom-control")]
     .map((control) => control.parentElement);
@@ -494,23 +559,24 @@ export async function initRitual({ onChapterCollapse = () => {} } = {}) {
   ritualInitialized = true;
 
   document.querySelector("[data-ritual-reset]").addEventListener("click", resetRitual);
-  document.querySelector("[data-timer-back]").addEventListener("click", closeRitualTimer);
   document.querySelector("[data-timer-minus]").addEventListener("click", () => adjustRitualTimer(-1));
   document.querySelector("[data-timer-plus]").addEventListener("click", () => adjustRitualTimer(1));
+  document.querySelector("[data-timer-collapse]").addEventListener("click", () => {
+    if (timerItem) setItemCollapsed(timerItem, true, true);
+  });
+  document.querySelector("[data-timer-panel]").addEventListener("click", (event) => {
+    if (!event.target.closest("button, input, select, textarea")) focusRitualTimer();
+  });
   document.querySelector("[data-timer-chill]").addEventListener("click", () => {
     invalidateSnapshot();
     ritualState.timer.alarm = "chilled";
     updateRitualTimer();
   });
   document.addEventListener("visibilitychange", () => {
-    const overlay = document.querySelector("[data-timer-overlay]");
     if (document.visibilityState !== "visible") {
       pauseRitualTimer();
-    } else if (!overlay.hidden && timerActiveSince === null) {
-      timerActiveSince = Date.now();
-      timerInterval = window.setInterval(updateRitualTimer, 250);
-      updateRitualTimer();
-      acquireTimerWakeLock();
+    } else {
+      openRitualTimer();
     }
   });
 
@@ -519,5 +585,14 @@ export async function initRitual({ onChapterCollapse = () => {} } = {}) {
   } catch (error) {
     document.querySelector("[data-ritual-tree]").textContent = error.message;
     throw error;
+  }
+}
+
+export function setRitualViewVisible(visible) {
+  ritualViewVisible = visible;
+  if (!visible) {
+    pauseRitualTimer();
+  } else if (timerItem && !timerItem.classList.contains("collapsed")) {
+    openRitualTimer();
   }
 }

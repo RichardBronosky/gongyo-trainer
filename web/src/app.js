@@ -1,4 +1,4 @@
-import { initRitual } from "./ritual.js";
+import { initRitual, setRitualViewVisible } from "./ritual.js";
 import { activeChapterNumber, initTrainer, pauseChapter } from "./syllables.js";
 
 const hosts = {
@@ -58,6 +58,7 @@ function renderView(view, hash = location.hash) {
     revealRitualTarget(`#chapter-${activeChapter}`);
   }
   Object.entries(hosts).forEach(([name, host]) => { host.hidden = name !== view; });
+  setRitualViewVisible(view === "ritual");
   document.querySelectorAll("[data-view-link]").forEach((link) => {
     const active = link.dataset.viewLink === view;
     link.classList.toggle("active", active);

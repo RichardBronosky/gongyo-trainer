@@ -160,14 +160,6 @@
   font: 700 1rem ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
-.ritual-label a,
-.ritual-label a:hover,
-.ritual-label a:focus-visible {
-  color: inherit;
-  font-weight: inherit;
-  text-decoration: none;
-}
-
 .ritual-notes {
   display: grid;
   gap: 5px;
@@ -183,21 +175,26 @@
   line-height: 1;
 }
 
-.timer-overlay {
-  position: fixed;
-  z-index: 2000;
-  inset: 0;
+.timer-panel {
   display: grid;
-  place-content: center;
+  grid-template-rows: auto auto auto auto auto 1fr auto;
+  align-items: center;
   justify-items: center;
-  gap: 14px;
-  padding: 24px;
+  gap: clamp(8px, 2dvh, 14px);
+  width: auto;
+  height: 100dvh;
+  margin: 7px calc(0px - clamp(12px, 3vw, 24px)) 0;
+  padding: clamp(14px, 4dvh, 28px) clamp(12px, 4vw, 24px) 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
   background: #080a0f;
   color: var(--text);
+  scroll-margin-top: 0;
   text-align: center;
 }
 
-.timer-overlay[hidden] {
+.ritual-item.collapsed > .timer-panel {
   display: none;
 }
 
@@ -244,11 +241,25 @@
   min-width: 7rem;
 }
 
-.timer-overlay.alarming {
+.timer-collapse {
+  align-self: end;
+  justify-self: end;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 11px;
+  background: transparent;
+  color: currentColor;
+  font: 700 1.25rem/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  cursor: pointer;
+}
+
+.timer-panel.alarming {
   animation: timer-alarm 1s steps(1, end) infinite;
 }
 
-.timer-overlay.alarming .timer-clock {
+.timer-panel.alarming .timer-clock {
   color: currentColor;
 }
 
@@ -261,6 +272,24 @@
   50%, 100% {
     background: #000;
     color: #fff;
+  }
+}
+
+@media (max-height: 420px) {
+  .timer-panel {
+    gap: 4px;
+    padding-block: 8px;
+  }
+
+  .timer-display {
+    font-size: clamp(3rem, 18dvh, 4rem);
+  }
+
+  .timer-controls button,
+  .timer-chill,
+  .timer-collapse {
+    min-height: 38px;
+    height: 38px;
   }
 }
 

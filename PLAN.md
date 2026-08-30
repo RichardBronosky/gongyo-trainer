@@ -44,6 +44,7 @@ Behavior:
 - Lines beginning with `*` are completable top-level ritual actions.
 - Lines beginning with `-` are nested explanatory/action items without checkboxes.
 - Parent items have explicit expand/collapse controls.
+- Tapping an unchecked collapsed parent expands it; completion still requires a subsequent row tap or its explicit checkbox.
 - Expanded Ritual items taller than the viewport mirror their collapse control at the bottom so the next step is reachable without reverse scrolling.
 - Completing a parent collapses its descendants.
 - Completion state persists locally until the practitioner uses the Ritual reset control.
@@ -64,9 +65,9 @@ The renderer replaces the placeholder with:
 
 - A persisted numeric minute selector.
 - A normal completion checkbox independent from the timer.
-- A full-screen countdown with add/subtract minute controls.
-- Row-tap start/resume behavior that runs only while the timer and browser tab are visible.
-- Persisted active elapsed time that pauses when the timer is hidden.
+- An inline, viewport-height countdown panel with add/subtract minute controls and no internal scrolling.
+- Row-tap start/resume behavior that expands and aligns the panel with the viewport.
+- Persisted active elapsed time that runs only while the panel is expanded and the browser tab is visible.
 - A flashing black/white completion state that continues counting total active time.
 - A Chill control that stops flashing without stopping or closing the timer.
 - The current local time.
@@ -161,7 +162,7 @@ The implementation should remain data-oriented enough to support additional repe
 - `- ` denotes a non-checkbox nested item.
 - Non-list text becomes notes.
 - `|__| minutes` invokes the timer UI.
-- `Recite Chapter 2` and `Recite Chapter 16` invoke trainer links.
+- `Recite Chapter 2` and `Recite Chapter 16` invoke inline chapter expansions in Ritual.
 
 ### `web/assets/syllables.5-wide.txt`
 
@@ -177,7 +178,7 @@ The implementation should remain data-oriented enough to support additional repe
 The application intentionally uses browser-native HTML, CSS, and JavaScript.
 
 - `web/`: Complete GitHub Pages artifact; no documentation or tooling belongs here.
-- `web/index.html`: Canonical SPA shell with shared header, view selector, both view hosts, timer, and global FSD UI.
+- `web/index.html`: Canonical SPA shell with shared header, view selector, both view hosts, movable timer panel, and global FSD UI.
 - `web/ritual.html`: Legacy Ritual redirect alias that preserves hashes.
 - `web/syllables.html`: Legacy Trainer redirect alias that preserves hashes.
 - `web/src/app.js`: Initialization, view placement, History API routing, installation, and service-worker lifecycle.
@@ -192,6 +193,7 @@ The application intentionally uses browser-native HTML, CSS, and JavaScript.
 - `docs/`: Human/AI reference material that is not fetched at runtime.
 - `internal/server.py`: Local-only no-cache, byte-range development server behind `tools.sh`.
 - `tools.sh`: Sole user-facing entry point for local development tools.
+- `tools.sh public`: Supervise the local server and ngrok together, accepting forwarded requests only from the detected home IPv4; tunnel lifecycle code remains backend-oriented for a future Tailscale command.
 
 All runtime URLs must remain relative so the app works below the GitHub Pages project path `/gongyo-trainer/`.
 The deployed application remains entirely static: `.github/workflows/pages.yml` publishes only `web/`, never `internal/` or other repository tooling.
@@ -245,11 +247,11 @@ Deployment acceptance:
 - Every `*` item has a completion control.
 - Nested children expand and collapse.
 - Completing a parent collapses children.
-- Recitation links navigate to the correct Trainer anchor; parent toggles embed the chapter before Sound Bell.
+- Recitation rows expand the chapter before Sound Bell; only the top view selector enters Trainer.
 - Only one Ritual chapter is expanded, and collapse/completion pauses audio and disengages FSD while preserving the playhead.
 - Timer minutes survive refresh and cache upgrades.
 - Ritual completion and timer progress survive refresh and cache upgrades until reset.
-- The timer advances only while its overlay and browser tab are visible.
+- The timer advances only while its inline panel is expanded and the browser tab is visible.
 - Minus-to-zero enters flashing completion mode without losing total active time.
 - Chill stops flashing while total active time continues.
 - Reset and restore swap states until the practitioner changes a restored value.
