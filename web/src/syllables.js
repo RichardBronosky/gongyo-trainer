@@ -195,6 +195,8 @@ let fsdTimer = null;
 let fsdCell = null;
 let fsdState = null;
 let audioFsdState = null;
+let fsdWakeLock = null;
+let fsdWakeLockPending = false;
 let audioFsdTickStarted = false;
 const CLICK_TRACK_STORAGE_KEY = "gongyo.clickTrack";
 const CLICK_SCHEDULE_AHEAD_SECONDS = 0.15;
@@ -372,6 +374,36 @@ function updateRateBubble(bpm = null) {
   if (bpm !== null) bubble.textContent = `${bpm.toFixed(1)} BPM`;
 }
 
+function fsdIsActive() {
+  return Boolean(fsdState || audioFsdState);
+}
+
+async function acquireFsdWakeLock() {
+  if (fsdWakeLockPending || fsdWakeLock || !fsdIsActive() || document.visibilityState !== "visible") return;
+  fsdWakeLockPending = true;
+  try {
+    const wakeLock = await navigator.wakeLock?.request("screen");
+    if (!wakeLock) return;
+    if (!fsdIsActive() || document.visibilityState !== "visible") {
+      wakeLock.release().catch(() => {});
+      return;
+    }
+    fsdWakeLock = wakeLock;
+    wakeLock.addEventListener("release", () => {
+      if (fsdWakeLock === wakeLock) fsdWakeLock = null;
+    }, { once: true });
+  } catch {
+    fsdWakeLock = null;
+  } finally {
+    fsdWakeLockPending = false;
+  }
+}
+
+function releaseFsdWakeLock() {
+  fsdWakeLock?.release().catch(() => {});
+  fsdWakeLock = null;
+}
+
 function stopFsd(message = "FSD disengaged. Tap five consecutive rows to restart.") {
   if (fsdTimer !== null) window.clearTimeout(fsdTimer);
   fsdTimer = null;
@@ -379,6 +411,7 @@ function stopFsd(message = "FSD disengaged. Tap five consecutive rows to restart
   fsdCell?.classList.remove("fsd-active");
   fsdCell = null;
   fsdState = null;
+  if (!fsdIsActive()) releaseFsdWakeLock();
   clearActiveRepeatIndicators();
   updateRateBubble();
   updateFsdStatus(message);
@@ -672,6 +705,7 @@ function stopAudioFsd() {
   fsdCell?.classList.remove("fsd-active");
   fsdCell = null;
   audioFsdState = null;
+  if (!fsdIsActive()) releaseFsdWakeLock();
   clearActiveRepeatIndicators();
   updateRateBubble();
 }
@@ -687,6 +721,7 @@ function startAudioFsd(chapter, audio, timing) {
     currentSequenceIndex: -1,
     currentCellIndex: -1,
   };
+  acquireFsdWakeLock();
   startRecordedClicks(audio, timing);
   updateChapterTimingStatus(chapter, `Audio FSD | ${timing.rows.length} rows | ${timing.bpm.toFixed(1)} BPM`);
   updateRateBubble(timing.bpm);
@@ -863,6 +898,7 @@ function startFsd(startRow, bpm, statusLabel = "FSD engaged", startCellIndex = 0
     intervalMs,
     chapter,
   };
+  acquireFsdWakeLock();
   persistFsdTiming(fsdState, startCellIndex);
   updateRateBubble(bpm);
   updateFsdStatus(
@@ -1097,6 +1133,10 @@ export async function initTrainer() {
   if (trainerInitialized) return chapterRegistry;
   trainerInitialized = true;
   setupCellTaps();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && fsdIsActive()) acquireFsdWakeLock();
+    else releaseFsdWakeLock();
+  });
   document.querySelector("[data-rate-bubble]")?.addEventListener("click", () => {
     if (audioFsdState) {
       audioFsdState.audio.pause();
